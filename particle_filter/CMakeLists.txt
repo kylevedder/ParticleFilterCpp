@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.8.3)
 project(particle_filter)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
-add_compile_options(-std=c++11 -Wall -Werror)
+add_compile_options(-std=c++11 -g -Wall -Werror)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -150,13 +150,20 @@ include_directories(
 #   ${catkin_LIBRARIES}
 # )
 
-add_executable(simulator src/simulator.cpp)
-target_link_libraries(simulator ${catkin_LIBRARIES})
-add_dependencies(simulator particle_filter_generate_messages_cpp)
+add_library(particle_filter_lib
+  src/particle_filter.cpp
+)
+target_link_libraries(particle_filter_lib
+   ${catkin_LIBRARIES}
+)
 
-# add_executable(listener src/listener.cpp)
-# target_link_libraries(listener ${catkin_LIBRARIES})
-# add_dependencies(listener particle_filter_generate_messages_cpp)
+add_executable(particle_filter_node src/particle_filter_node.cpp)
+target_link_libraries(particle_filter_node particle_filter_lib ${catkin_LIBRARIES})
+add_dependencies(particle_filter_node particle_filter_lib particle_filter_generate_messages_cpp)
+
+add_executable(simulator_node src/simulator_node.cpp)
+target_link_libraries(simulator_node ${catkin_LIBRARIES})
+add_dependencies(simulator_node particle_filter_generate_messages_cpp)
 
 #############
 ## Install ##

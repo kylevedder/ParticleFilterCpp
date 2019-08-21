@@ -6,10 +6,10 @@
 
 #include "particle_filter/geometry.h"
 #include "particle_filter/math_util.h"
+#include "particle_filter/pose.h"
 
 #include <cmath>
 
-static constexpr float kPi = M_PI;
 static constexpr float kMinAngle = -kPi / 2;
 static constexpr float kMaxAngle = kPi / 2;
 static constexpr int kNumReadings = 100;
@@ -29,13 +29,6 @@ struct Map {
   std::vector<Wall> walls;
 };
 
-struct Pose {
-  Eigen::Vector2f tra;
-  float rot;
-  Pose() : tra(), rot(){};
-  Pose(const Eigen::Vector2f& tra, const float& rot) : tra(tra), rot(rot){};
-};
-
 std_msgs::Header MakeHeader() {
   static uint32_t seq = 0;
   std_msgs::Header header;
@@ -45,7 +38,7 @@ std_msgs::Header MakeHeader() {
   return header;
 }
 
-Eigen::Vector2f GetRayReturn(const Pose& ray, const Map& map) {
+Eigen::Vector2f GetRayReturn(const util::Pose& ray, const Map& map) {
   Eigen::Vector2f delta =
       Eigen::Rotation2Df(ray.rot) * Eigen::Vector2f(kMaxReading - kEpsilon, 0);
   for (const Wall& w : map.walls) {
@@ -68,7 +61,7 @@ Eigen::Vector2f GetRayReturn(const Pose& ray, const Map& map) {
   return delta;
 }
 
-sensor_msgs::LaserScan MakeScan(const Pose& robot_pose, const Map& map) {
+sensor_msgs::LaserScan MakeScan(const util::Pose& robot_pose, const Map& map) {
   sensor_msgs::LaserScan scan;
   scan.header = MakeHeader();
   scan.angle_min = kMinAngle;
@@ -82,7 +75,7 @@ sensor_msgs::LaserScan MakeScan(const Pose& robot_pose, const Map& map) {
   for (int ray_idx = 0; ray_idx < kNumReadings; ++ray_idx) {
     const float angle =
         kMinAngle + static_cast<float>(kAngleDelta * ray_idx) + robot_pose.rot;
-    const Pose ray(robot_pose.tra, angle);
+    const util::Pose ray(robot_pose.tra, angle);
     const Eigen::Vector2f ray_return = GetRayReturn(ray, map);
     const float norm = ray_return.norm();
     scan.ranges.push_back(norm);
@@ -98,7 +91,7 @@ Map MakeMap() {
 }
 
 int main(int argc, char** argv) {
-  ros::init(argc, argv, "talker");
+  ros::init(argc, argv, "simulator");
 
   ros::NodeHandle n;
 

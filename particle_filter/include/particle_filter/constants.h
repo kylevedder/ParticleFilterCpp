@@ -1,6 +1,7 @@
 #pragma once
 
 static constexpr bool kProduction = false;
+static constexpr float kPi = M_PI;
 static constexpr float kEpsilon = 0.001f;
 
 #define NP_CHECK(exp) \
