@@ -7,6 +7,8 @@
 #include "particle_filter/geometry.h"
 #include "particle_filter/math_util.h"
 
+#include "visualization_msgs/MarkerArray.h"
+
 #include "eigen3/Eigen/Geometry"
 
 namespace localization {
@@ -35,9 +37,10 @@ util::Pose FollowTrajectory(const util::Pose& pose_global_frame,
   const float move_y_dist =
       -(cos(fabs(rotation)) * circle_radius - circle_radius);
 
-  ROS_INFO("Translation: %f Rotation: %f Circle Radius %f Move X %f Move Y %f!",
-           distance_along_arc, rotation, circle_radius, move_x_dist,
-           move_y_dist);
+  // ROS_INFO("Translation: %f Rotation: %f Circle Radius %f Move X %f Move Y
+  // %f!",
+  //          distance_along_arc, rotation, circle_radius, move_x_dist,
+  //          move_y_dist);
 
   const Eigen::Vector2f movement_arc_robot_frame(move_x_dist, move_y_dist);
   const Eigen::Vector2f movement_arc_global_frame =
@@ -52,8 +55,8 @@ util::Pose MotionModel::ForwardPredict(const util::Pose& pose_global_frame,
                                        const float rotation_robot_frame) {
   NP_CHECK(std::isfinite(translation_robot_frame));
   NP_CHECK(std::isfinite(rotation_robot_frame));
-  static constexpr float kDistanceAlongArcStdDev = 0.05f;
-  static constexpr float kRotStdDev = 0.4f;
+  static constexpr float kDistanceAlongArcStdDev = 0.01f;
+  static constexpr float kRotStdDev = 0.05f;
   std::normal_distribution<> distance_along_arc_dist(translation_robot_frame,
                                                      kDistanceAlongArcStdDev);
   std::normal_distribution<> rotation_dist(rotation_robot_frame, kRotStdDev);
@@ -114,6 +117,8 @@ ParticleFilter::ParticleFilter(const util::Map& map,
   InitalizePose(start_pose);
 }
 
+bool ParticleFilter::IsInitialized() const { return initialized_; }
+
 void ParticleFilter::InitalizePose(const util::Pose& start_pose) {
   for (Particle& p : particles_) {
     p = Particle(start_pose, 1.0f);
@@ -166,6 +171,70 @@ void ParticleFilter::UpdateObservation(const util::LaserScan& laser_scan) {
   }
 
   particles_ = resampled_particles;
+}
+
+void ParticleFilter::DrawParticles(ros::Publisher* particle_pub) const {
+  static visualization_msgs::MarkerArray particle_markers;
+  for (visualization_msgs::Marker& marker : particle_markers.markers) {
+    marker.action = marker.DELETE;
+  }
+  particle_pub->publish(particle_markers);
+  particle_markers.markers.clear();
+  float max_weight = 0;
+  for (const Particle& p : particles_) {
+    max_weight = std::max(p.weight, max_weight);
+  }
+  for (const Particle& p : particles_) {
+    {
+      visualization_msgs::Marker marker;
+      marker.header.frame_id = "map";
+      marker.header.stamp = ros::Time();
+      marker.ns = "particles";
+      marker.id = particle_markers.markers.size();
+      marker.type = visualization_msgs::Marker::SPHERE;
+      marker.action = visualization_msgs::Marker::ADD;
+      marker.pose.position.x = p.pose.tra.x();
+      marker.pose.position.y = p.pose.tra.y();
+      marker.pose.position.z = 0;
+      marker.scale.x = 0.02;
+      marker.scale.y = 0.02;
+      marker.scale.z = 0.02;
+      marker.color.a = p.weight / max_weight;
+      marker.color.r = 1.0;
+      marker.color.g = 0.0;
+      marker.color.b = 0.0;
+      particle_markers.markers.push_back(marker);
+    }
+    {
+      visualization_msgs::Marker marker;
+      marker.header.frame_id = "map";
+      marker.header.stamp = ros::Time();
+      marker.ns = "particles";
+      marker.id = particle_markers.markers.size();
+      marker.type = visualization_msgs::Marker::ARROW;
+      marker.action = visualization_msgs::Marker::ADD;
+      geometry_msgs::Point start;
+      start.x = p.pose.tra.x();
+      start.y = p.pose.tra.y();
+      geometry_msgs::Point end;
+      const Eigen::Vector2f delta(math_util::Cos(p.pose.rot) * 0.1f,
+                                  math_util::Sin(p.pose.rot) * 0.1f);
+      end.x = p.pose.tra.x() + delta.x();
+      end.y = p.pose.tra.y() + delta.y();
+      marker.points.push_back(start);
+      marker.points.push_back(end);
+      marker.scale.x = 0.01;
+      marker.scale.y = 0.01;
+      marker.scale.z = 0.01;
+      marker.color.a = p.weight / max_weight;
+      marker.color.r = 0.0;
+      marker.color.g = 1.0;
+      marker.color.b = 0.0;
+      particle_markers.markers.push_back(marker);
+    }
+  }
+
+  particle_pub->publish(particle_markers);
 }
 
 }  // namespace localization

@@ -84,30 +84,26 @@ int main(int argc, char** argv) {
   ros::NodeHandle n;
 
   ros::Publisher initial_pose_pub =
-      n.advertise<geometry_msgs::Twist>("initial_pose", 100);
+      n.advertise<geometry_msgs::Twist>("initial_pose", 1);
   ros::Publisher scan_pub = n.advertise<sensor_msgs::LaserScan>("laser", 10);
   ros::Publisher odom_pub = n.advertise<geometry_msgs::Twist>("odom", 10);
 
   ros::Rate loop_rate(10);
 
   const util::Map map = MakeMap();
-
-  util::Pose current_pose({0, 0}, 0);
-
-  for (size_t i = 0; i < 20; ++i) {
-    initial_pose_pub.publish(current_pose.ToTwist());
-    ros::spinOnce();
-    ROS_INFO("Published start!");
-  }
+  const util::Pose initial_pose({0, 0}, 0);
+  util::Pose current_pose = initial_pose;
 
   int iteration = 0;
   while (ros::ok()) {
+    initial_pose_pub.publish(initial_pose.ToTwist());
     if (iteration >= 200) {
       iteration = 0;
     }
 
-    const util::Pose move = ((iteration < 100) ? util::Pose({-0.05, 0}, 0)
-                                               : util::Pose({0.05, 0}, 0));
+    const util::Pose move({0, 0}, 0);
+    // ((iteration < 100) ? util::Pose({-0.05, 0}, 0)
+    //                                            : util::Pose({0.05, 0}, 0));
     // ROS_INFO("Translate: %f Rotate %f", move.tra.x(), move.rot);
     current_pose = current_pose + move;
 

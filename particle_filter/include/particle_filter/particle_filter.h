@@ -58,9 +58,13 @@ class ParticleFilter {
   explicit ParticleFilter(const util::Map& map);
   ParticleFilter(const util::Map& map, const util::Pose& start_pose);
 
+  bool IsInitialized() const;
+
   void InitalizePose(const util::Pose& start_pose);
 
   void UpdateOdom(const float& translation, const float& rotation);
   void UpdateObservation(const util::LaserScan& laser_scan);
+
+  void DrawParticles(ros::Publisher* particle_pub) const;
 };
 }  // namespace localization

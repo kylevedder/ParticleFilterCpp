@@ -44,8 +44,8 @@ class LaserScan {
         ros_laser_scan_.angle_increment * ray_index + obs_pose.rot);
     const float& range_max = ros_laser_scan_.range_max;
 
-    return {math_util::Sin(ray_angle_obs_frame) * range_max,
-            math_util::Cos(ray_angle_obs_frame) * range_max};
+    return {math_util::Cos(ray_angle_obs_frame) * range_max,
+            math_util::Sin(ray_angle_obs_frame) * range_max};
   }
 };
 }  // namespace util
