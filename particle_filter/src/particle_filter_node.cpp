@@ -22,35 +22,91 @@ util::Map MakeMap() {
   return m;
 }
 
+void DrawGroundTruth(const util::Pose& ground_truth,
+                     ros::Publisher* ground_truth_pub) {
+  {
+    visualization_msgs::Marker marker;
+    marker.header.frame_id = "map";
+    marker.header.stamp = ros::Time();
+    marker.ns = "ground_truth_body";
+    marker.id = 0;
+    marker.type = visualization_msgs::Marker::SPHERE;
+    marker.action = visualization_msgs::Marker::ADD;
+    marker.pose.position.x = ground_truth.tra.x();
+    marker.pose.position.y = ground_truth.tra.y();
+    marker.pose.position.z = 0;
+    marker.scale.x = 0.1;
+    marker.scale.y = 0.1;
+    marker.scale.z = 0.1;
+    marker.color.a = 1.0;
+    marker.color.r = 0.0;
+    marker.color.g = 1.0;
+    marker.color.b = 0.0;
+    ground_truth_pub->publish(marker);
+  }
+  {
+    visualization_msgs::Marker marker;
+    marker.header.frame_id = "map";
+    marker.header.stamp = ros::Time();
+    marker.ns = "ground_truth_arrow";
+    marker.id = 0;
+    marker.type = visualization_msgs::Marker::ARROW;
+    marker.action = visualization_msgs::Marker::ADD;
+    geometry_msgs::Point start;
+    start.x = ground_truth.tra.x();
+    start.y = ground_truth.tra.y();
+    geometry_msgs::Point end;
+    const Eigen::Vector2f delta(math_util::Cos(ground_truth.rot) * 0.4f,
+                                math_util::Sin(ground_truth.rot) * 0.4f);
+    end.x = ground_truth.tra.x() + delta.x();
+    end.y = ground_truth.tra.y() + delta.y();
+    marker.points.push_back(start);
+    marker.points.push_back(end);
+    marker.scale.x = 0.02;
+    marker.scale.y = 0.1;
+    marker.scale.z = 0.1;
+    marker.color.a = 1.0;
+    marker.color.r = 0.0;
+    marker.color.g = 1.0;
+    marker.color.b = 0.0;
+    ground_truth_pub->publish(marker);
+  }
+}
+
 struct ParticleFilterWrapper {
   localization::ParticleFilter particle_filter;
-  ros::Publisher marker_pub;
+  ros::Publisher particle_pub;
+  ros::Publisher ground_truth_pub;
 
   ParticleFilterWrapper() = delete;
   ParticleFilterWrapper(const util::Map& map, ros::NodeHandle* n)
       : particle_filter(map) {
-    marker_pub = n->advertise<visualization_msgs::MarkerArray>("particles", 10);
+    particle_pub =
+        n->advertise<visualization_msgs::MarkerArray>("particles", 10);
+    ground_truth_pub =
+        n->advertise<visualization_msgs::Marker>("ground_truth", 10);
   }
 
   void StartCallback(const geometry_msgs::Twist::ConstPtr& msg) {
+    util::Pose start_pose(*msg);
+    DrawGroundTruth(start_pose, &ground_truth_pub);
     if (particle_filter.IsInitialized()) {
       return;
     }
-    ROS_INFO("Got Start");
-    util::Pose start(*msg);
-    particle_filter.InitalizePose(start);
+    particle_filter.InitalizePose(start_pose);
+    ROS_INFO("Initialized Particle Filter");
   }
 
   void LaserCallback(const sensor_msgs::LaserScan::ConstPtr& msg) {
     util::LaserScan laser(*msg);
     particle_filter.UpdateObservation(laser);
-    particle_filter.DrawParticles(&marker_pub);
+    particle_filter.DrawParticles(&particle_pub);
   }
 
   void OdomCallback(const geometry_msgs::Twist::ConstPtr& msg) {
     util::Pose odom(*msg);
     particle_filter.UpdateOdom(odom.tra.x(), odom.rot);
-    particle_filter.DrawParticles(&marker_pub);
+    particle_filter.DrawParticles(&particle_pub);
   }
 };
 
@@ -59,10 +115,36 @@ int main(int argc, char** argv) {
 
   ros::NodeHandle n;
 
+  const util::Pose pr = geometry::FollowTrajectory({{0, 0}, 0}, 0, kPi / 2);
+  ROS_INFO("Follow result: (%f, %f), %f", pr.tra.x(), pr.tra.y(), pr.rot);
+  NP_CHECK(fabs(pr.tra.x()) < 0.01f);
+  NP_CHECK(fabs(pr.tra.y()) < 0.01f);
+  NP_CHECK(fabs(pr.rot - kPi / 2) < 0.01f);
+
+  const util::Pose ps = geometry::FollowTrajectory({{0, 0}, 0}, 1, 0);
+  ROS_INFO("Follow result: (%f, %f), %f", ps.tra.x(), ps.tra.y(), ps.rot);
+  NP_CHECK(fabs(ps.tra.x() - 1.0f) < 0.01f);
+  NP_CHECK(fabs(ps.tra.y()) < 0.01f);
+  NP_CHECK(fabs(ps.rot) < 0.01f);
+
+  const util::Pose pn =
+      geometry::FollowTrajectory({{0, 1}, 0}, kPi / 2, -kPi / 2);
+  ROS_INFO("Follow result: (%f, %f), %f", pn.tra.x(), pn.tra.y(), pn.rot);
+  NP_CHECK(fabs(pn.tra.x() - 1.0f) < 0.01f);
+  NP_CHECK(fabs(pn.tra.y() - 2.0f) < 0.01f);
+  NP_CHECK(fabs(pn.rot + kPi / 2) < 0.01f);
+
+  const util::Pose p =
+      geometry::FollowTrajectory({{0, 1}, 0}, kPi / 2, kPi / 2);
+  ROS_INFO("Follow result: (%f, %f), %f", p.tra.x(), p.tra.y(), p.rot);
+  NP_CHECK(fabs(p.tra.x() - 1.0f) < 0.01f);
+  NP_CHECK(fabs(p.tra.y() - 0.0f) < 0.01f);
+  NP_CHECK(fabs(p.rot - kPi / 2) < 0.01f);
+
   ParticleFilterWrapper wrapper(MakeMap(), &n);
 
   ros::Subscriber initial_pose_sub = n.subscribe(
-      "initial_pose", 1000, &ParticleFilterWrapper::StartCallback, &wrapper);
+      "true_pose", 1000, &ParticleFilterWrapper::StartCallback, &wrapper);
   ros::Subscriber laser_sub = n.subscribe(
       "laser", 1000, &ParticleFilterWrapper::LaserCallback, &wrapper);
   ros::Subscriber odom_sub =

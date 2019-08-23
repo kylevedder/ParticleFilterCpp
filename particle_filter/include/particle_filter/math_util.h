@@ -122,6 +122,9 @@ T Ramp(const T x, const T x_min, const T x_max, const T y_min, const T y_max) {
 
 template <typename T>
 T ProbabilityDensityGuassian(const T& sample, const T& mean, const T& stddev) {
+  if (stddev == 0) {
+    return (sample == mean) ? 1 : 0;
+  }
   return 1.0 / sqrt(2 * Sq(stddev) * M_PI) *
          exp(-Sq(sample - mean) / (2 * Sq(stddev)));
 }
@@ -248,5 +251,4 @@ unsigned int SolveCubic(const T& a, const T& b, const T& c, const T& d, T* r0,
     return 1;
   }
 }
-
 }  // namespace math_util

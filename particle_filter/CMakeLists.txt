@@ -11,6 +11,7 @@ add_compile_options(-std=c++11 -g -Wall -Werror)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
+  tf
   roscpp
   rospy
   std_msgs

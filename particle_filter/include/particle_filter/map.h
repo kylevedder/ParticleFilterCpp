@@ -21,7 +21,13 @@ struct Map {
 
   float MinDistanceAlongRay(const Eigen::Vector2f& ray_start,
                             const Eigen::Vector2f& ray_end) const {
+    NP_FINITE(ray_start.x());
+    NP_FINITE(ray_start.y());
+    NP_FINITE(ray_end.x());
+    NP_FINITE(ray_end.y());
+    NP_CHECK(ray_start != ray_end);
     float sq_distance = (ray_end - ray_start).squaredNorm();
+    NP_FINITE(sq_distance);
     for (const Wall& w : walls) {
       const auto res =
           geometry::CheckLineLineIntersection(w.p1, w.p2, ray_start, ray_end);
@@ -33,6 +39,8 @@ struct Map {
       if (candidate_sq_distance < sq_distance) {
         sq_distance = candidate_sq_distance;
       }
+
+      NP_FINITE(sq_distance);
     }
 
     return sqrt(sq_distance);

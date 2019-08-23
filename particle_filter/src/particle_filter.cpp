@@ -15,56 +15,21 @@ namespace localization {
 
 MotionModel::MotionModel() : rd_(), gen_(rd_()) {}
 
-util::Pose FollowTrajectory(const util::Pose& pose_global_frame,
-                            const float& distance_along_arc,
-                            const float& rotation) {
-  NP_CHECK(std::isfinite(distance_along_arc));
-  NP_CHECK(std::isfinite(rotation));
-  const Eigen::Rotation2Df robot_to_global_frame(pose_global_frame.rot);
-  const Eigen::Vector2f robot_forward_global_frame =
-      robot_to_global_frame * Eigen::Vector2f(1, 0);
-
-  if (rotation == 0) {
-    ROS_INFO("Rotation is zero!");
-    util::Pose updated_pose = pose_global_frame;
-    updated_pose.tra += robot_forward_global_frame * distance_along_arc;
-    return updated_pose;
-  }
-
-  const float circle_radius = distance_along_arc / rotation;
-
-  const float move_x_dist = sin(rotation) * circle_radius;
-  const float move_y_dist =
-      -(cos(fabs(rotation)) * circle_radius - circle_radius);
-
-  // ROS_INFO("Translation: %f Rotation: %f Circle Radius %f Move X %f Move Y
-  // %f!",
-  //          distance_along_arc, rotation, circle_radius, move_x_dist,
-  //          move_y_dist);
-
-  const Eigen::Vector2f movement_arc_robot_frame(move_x_dist, move_y_dist);
-  const Eigen::Vector2f movement_arc_global_frame =
-      robot_to_global_frame * movement_arc_robot_frame;
-
-  return {movement_arc_global_frame + pose_global_frame.tra,
-          math_util::AngleMod(rotation + pose_global_frame.rot)};
-}
-
 util::Pose MotionModel::ForwardPredict(const util::Pose& pose_global_frame,
                                        const float translation_robot_frame,
                                        const float rotation_robot_frame) {
   NP_CHECK(std::isfinite(translation_robot_frame));
   NP_CHECK(std::isfinite(rotation_robot_frame));
-  static constexpr float kDistanceAlongArcStdDev = 0.01f;
-  static constexpr float kRotStdDev = 0.05f;
-  std::normal_distribution<> distance_along_arc_dist(translation_robot_frame,
-                                                     kDistanceAlongArcStdDev);
-  std::normal_distribution<> rotation_dist(rotation_robot_frame, kRotStdDev);
+  std::normal_distribution<> distance_along_arc_dist(
+      translation_robot_frame, kPFMoveAlongArcNoiseStddev);
+  std::normal_distribution<> rotation_dist(rotation_robot_frame,
+                                           kPFMoveRotateNoiseStddev);
 
   const float distance_along_arc = distance_along_arc_dist(gen_);
   const float rotation = rotation_dist(gen_);
 
-  return FollowTrajectory(pose_global_frame, distance_along_arc, rotation);
+  return geometry::FollowTrajectory(pose_global_frame, distance_along_arc,
+                                    rotation);
 }
 
 SensorModel::SensorModel(const util::Map& map)
@@ -72,35 +37,52 @@ SensorModel::SensorModel(const util::Map& map)
 
 float GetDepthProbability(const float& sensor_reading, const float& map_reading,
                           const float& ray_min, const float& ray_max) {
-  return math_util::ProbabilityDensityExp(sensor_reading, 0.01f) +
-         math_util::ProbabilityDensityGuassian(sensor_reading, map_reading,
-                                               0.01f) *
-             4 +
-         math_util::ProbabilityDensityUniform(sensor_reading, ray_min,
-                                              ray_max) *
-             0.1 +
-         math_util::ProbabilityDensityUniform(sensor_reading, ray_max - 0.01f,
-                                              ray_max) *
-             0.02;
+  const float people_noise =
+      math_util::ProbabilityDensityExp(sensor_reading, 0.01f) * 0.0f;
+  const float sensor_reading_noise =
+      math_util::ProbabilityDensityGuassian(sensor_reading, map_reading,
+                                            kPFLaserReadingNoiseStddev) *
+      1.0f;
+  const float sensor_random_reading =
+      math_util::ProbabilityDensityUniform(sensor_reading, ray_min, ray_max) *
+      0.0f;
+  const float sensor_random_ray_max =
+      math_util::ProbabilityDensityUniform(sensor_reading, ray_max - 0.01f,
+                                           ray_max) *
+      0.0f;
+  return people_noise + sensor_reading_noise + sensor_random_reading +
+         sensor_random_ray_max;
 }
 
 float SensorModel::GetProbability(const util::Pose& pose_global_frame,
                                   const util::LaserScan& laser_scan) const {
+  if (laser_scan.ros_laser_scan_.ranges.empty()) {
+    return 0;
+  }
   float probability_sum = 0;
 
   const float& range_min = laser_scan.ros_laser_scan_.range_min;
   const float& range_max = laser_scan.ros_laser_scan_.range_max;
 
   for (size_t i = 0; i < laser_scan.ros_laser_scan_.ranges.size(); ++i) {
-    const float& range = laser_scan.ros_laser_scan_.ranges[i];
-    if (!std::isfinite(range) || range < kMinReading || range > kMaxReading) {
-      continue;
+    float range = laser_scan.ros_laser_scan_.ranges[i];
+    if (!std::isfinite(range)) {
+      range = range_max;
     }
+    range = math_util::Clamp(range_min, range, range_max);
+
     const Eigen::Vector2f endpoint =
         laser_scan.GetRayEndpoint(i, pose_global_frame);
     const Eigen::Vector2f& startpoint = pose_global_frame.tra;
+
+    NP_CHECK((endpoint - startpoint).norm() >= range_min - kEpsilon);
+    NP_CHECK((endpoint - startpoint).norm() <= range_max + kEpsilon);
+
     const float distance_to_map_wall =
         std::max(map_.MinDistanceAlongRay(startpoint, endpoint), range_min);
+    NP_FINITE(distance_to_map_wall);
+    NP_CHECK(range_min - kEpsilon <= distance_to_map_wall);
+    NP_CHECK(distance_to_map_wall <= range_max + kEpsilon);
 
     probability_sum +=
         GetDepthProbability(range, distance_to_map_wall, range_min, range_max);
@@ -120,8 +102,14 @@ ParticleFilter::ParticleFilter(const util::Map& map,
 bool ParticleFilter::IsInitialized() const { return initialized_; }
 
 void ParticleFilter::InitalizePose(const util::Pose& start_pose) {
+  NP_FINITE(start_pose.tra.x());
+  NP_FINITE(start_pose.tra.y());
+  NP_FINITE(start_pose.rot);
   for (Particle& p : particles_) {
     p = Particle(start_pose, 1.0f);
+    NP_FINITE(p.pose.tra.x());
+    NP_FINITE(p.pose.tra.y());
+    NP_FINITE(p.pose.rot);
   }
   initialized_ = true;
 }
@@ -133,7 +121,15 @@ void ParticleFilter::UpdateOdom(const float& translation,
     return;
   }
   for (Particle& p : particles_) {
+    NP_FINITE(p.pose.tra.x());
+    NP_FINITE(p.pose.tra.y());
+    NP_FINITE(p.pose.rot);
+    NP_FINITE(p.weight);
     p.pose = motion_model_.ForwardPredict(p.pose, translation, rotation);
+    NP_FINITE(p.pose.tra.x());
+    NP_FINITE(p.pose.tra.y());
+    NP_FINITE(p.pose.rot);
+    NP_FINITE(p.weight);
   }
 }
 
@@ -144,7 +140,15 @@ void ParticleFilter::UpdateObservation(const util::LaserScan& laser_scan) {
   }
 
   for (Particle& p : particles_) {
+    NP_FINITE(p.pose.tra.x());
+    NP_FINITE(p.pose.tra.y());
+    NP_FINITE(p.pose.rot);
+    NP_FINITE(p.weight);
     p.weight = sensor_model_.GetProbability(p.pose, laser_scan);
+    NP_FINITE(p.pose.tra.x());
+    NP_FINITE(p.pose.tra.y());
+    NP_FINITE(p.pose.rot);
+    NP_FINITE(p.weight);
   }
 
   const float total_weights = [this]() -> float {
@@ -160,7 +164,7 @@ void ParticleFilter::UpdateObservation(const util::LaserScan& laser_scan) {
   auto resampled_particles = particles_;
   for (Particle& new_p : resampled_particles) {
     float weight_sample = distribution(gen_);
-    NP_CHECK(weight_sample < total_weights);
+    NP_CHECK(weight_sample <= total_weights);
     for (const Particle& old_p : particles_) {
       if (weight_sample <= old_p.weight) {
         new_p = old_p;
@@ -193,13 +197,15 @@ void ParticleFilter::DrawParticles(ros::Publisher* particle_pub) const {
       marker.id = particle_markers.markers.size();
       marker.type = visualization_msgs::Marker::SPHERE;
       marker.action = visualization_msgs::Marker::ADD;
+      NP_FINITE(p.pose.tra.x());
+      NP_FINITE(p.pose.tra.y());
       marker.pose.position.x = p.pose.tra.x();
       marker.pose.position.y = p.pose.tra.y();
       marker.pose.position.z = 0;
-      marker.scale.x = 0.02;
-      marker.scale.y = 0.02;
-      marker.scale.z = 0.02;
-      marker.color.a = p.weight / max_weight;
+      marker.scale.x = 0.05;
+      marker.scale.y = 0.05;
+      marker.scale.z = 0.05;
+      marker.color.a = ((max_weight > 9.0f) ? (p.weight / max_weight) : 1.0f);
       marker.color.r = 1.0;
       marker.color.g = 0.0;
       marker.color.b = 0.0;
@@ -214,27 +220,33 @@ void ParticleFilter::DrawParticles(ros::Publisher* particle_pub) const {
       marker.type = visualization_msgs::Marker::ARROW;
       marker.action = visualization_msgs::Marker::ADD;
       geometry_msgs::Point start;
+      NP_FINITE(p.pose.tra.x());
+      NP_FINITE(p.pose.tra.y());
       start.x = p.pose.tra.x();
       start.y = p.pose.tra.y();
+      NP_FINITE(start.x);
+      NP_FINITE(start.y);
       geometry_msgs::Point end;
-      const Eigen::Vector2f delta(math_util::Cos(p.pose.rot) * 0.1f,
-                                  math_util::Sin(p.pose.rot) * 0.1f);
+      const Eigen::Vector2f delta(math_util::Cos(p.pose.rot) * 0.4f,
+                                  math_util::Sin(p.pose.rot) * 0.4f);
+      NP_FINITE(delta.x());
+      NP_FINITE(delta.y());
       end.x = p.pose.tra.x() + delta.x();
       end.y = p.pose.tra.y() + delta.y();
+      NP_FINITE(end.x);
+      NP_FINITE(end.y);
       marker.points.push_back(start);
       marker.points.push_back(end);
-      marker.scale.x = 0.01;
-      marker.scale.y = 0.01;
-      marker.scale.z = 0.01;
-      marker.color.a = p.weight / max_weight;
+      marker.scale.x = 0.02;
+      marker.scale.y = 0.1;
+      marker.scale.z = 0.1;
+      marker.color.a = ((max_weight > 9.0f) ? (p.weight / max_weight) : 1.0f);
       marker.color.r = 0.0;
       marker.color.g = 1.0;
       marker.color.b = 0.0;
       particle_markers.markers.push_back(marker);
     }
   }
-
   particle_pub->publish(particle_markers);
 }
-
 }  // namespace localization

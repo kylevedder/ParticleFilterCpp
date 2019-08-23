@@ -29,7 +29,11 @@
 #include "eigen3/Eigen/Dense"
 #include "eigen3/Eigen/Geometry"
 #include "math_util.h"
+#include "pose.h"
 
+using math_util::AngleMod;
+using math_util::Cos;
+using math_util::Sin;
 using math_util::Sq;
 using std::sqrt;
 
@@ -390,6 +394,33 @@ template <typename T>
 T ScalarProjection(const Eigen::Matrix<T, 2, 1>& vector1,
                    const Eigen::Matrix<T, 2, 1>& vector2) {
   return vector1.dot(vector2) / vector2.norm();
+}
+
+util::Pose FollowTrajectory(const util::Pose& pose_global_frame,
+                            const float& distance_along_arc,
+                            const float& rotation) {
+  const Eigen::Rotation2Df robot_to_global_frame(pose_global_frame.rot);
+  const Eigen::Vector2f robot_forward_global_frame =
+      robot_to_global_frame * Eigen::Vector2f(1, 0);
+
+  if (rotation == 0) {
+    util::Pose updated_pose = pose_global_frame;
+    updated_pose.tra += robot_forward_global_frame * distance_along_arc;
+    return updated_pose;
+  }
+
+  const float circle_radius = distance_along_arc / rotation;
+
+  const float move_x_dist = Sin(rotation) * circle_radius;
+  const float move_y_dist =
+      (Cos(fabs(rotation)) * circle_radius - circle_radius);
+
+  const Eigen::Vector2f movement_arc_robot_frame(move_x_dist, move_y_dist);
+  const Eigen::Vector2f movement_arc_global_frame =
+      robot_to_global_frame * movement_arc_robot_frame;
+
+  return {movement_arc_global_frame + pose_global_frame.tra,
+          AngleMod(rotation + pose_global_frame.rot)};
 }
 
 }  // namespace geometry
