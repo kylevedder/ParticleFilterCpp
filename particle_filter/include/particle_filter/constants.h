@@ -6,16 +6,16 @@ static constexpr bool kProduction = false;
 static constexpr float kPi = M_PI;
 static constexpr float kEpsilon = 0.001f;
 
-static constexpr float kLaserReadingNoiseStddev = 0.0f;
-static constexpr float kMoveAlongArcNoiseStddev = 0.01f;
-static constexpr float kMoveRotateNoiseStddev = 0.0f;
+static constexpr float kLaserReadingNoiseStddev = 0.02f;
+static constexpr float kMoveAlongArcNoiseStddev = 0.025f;
+static constexpr float kMoveRotateNoiseStddev = 0.02f;
 
 static constexpr float kPFLaserReadingNoiseStddev =
-    kLaserReadingNoiseStddev + 0.005f;
+    kLaserReadingNoiseStddev + 0.00f;
 static constexpr float kPFMoveAlongArcNoiseStddev =
-    kMoveAlongArcNoiseStddev + 0.005f;
+    kMoveAlongArcNoiseStddev + 0.01f;
 static constexpr float kPFMoveRotateNoiseStddev =
-    kMoveRotateNoiseStddev + 0.05f;
+    kMoveRotateNoiseStddev + 0.005f;
 
 static constexpr float kMinAngle = -kPi / 2;
 static constexpr float kMaxAngle = kPi / 2;

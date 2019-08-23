@@ -115,32 +115,6 @@ int main(int argc, char** argv) {
 
   ros::NodeHandle n;
 
-  const util::Pose pr = geometry::FollowTrajectory({{0, 0}, 0}, 0, kPi / 2);
-  ROS_INFO("Follow result: (%f, %f), %f", pr.tra.x(), pr.tra.y(), pr.rot);
-  NP_CHECK(fabs(pr.tra.x()) < 0.01f);
-  NP_CHECK(fabs(pr.tra.y()) < 0.01f);
-  NP_CHECK(fabs(pr.rot - kPi / 2) < 0.01f);
-
-  const util::Pose ps = geometry::FollowTrajectory({{0, 0}, 0}, 1, 0);
-  ROS_INFO("Follow result: (%f, %f), %f", ps.tra.x(), ps.tra.y(), ps.rot);
-  NP_CHECK(fabs(ps.tra.x() - 1.0f) < 0.01f);
-  NP_CHECK(fabs(ps.tra.y()) < 0.01f);
-  NP_CHECK(fabs(ps.rot) < 0.01f);
-
-  const util::Pose pn =
-      geometry::FollowTrajectory({{0, 1}, 0}, kPi / 2, -kPi / 2);
-  ROS_INFO("Follow result: (%f, %f), %f", pn.tra.x(), pn.tra.y(), pn.rot);
-  NP_CHECK(fabs(pn.tra.x() - 1.0f) < 0.01f);
-  NP_CHECK(fabs(pn.tra.y() - 2.0f) < 0.01f);
-  NP_CHECK(fabs(pn.rot + kPi / 2) < 0.01f);
-
-  const util::Pose p =
-      geometry::FollowTrajectory({{0, 1}, 0}, kPi / 2, kPi / 2);
-  ROS_INFO("Follow result: (%f, %f), %f", p.tra.x(), p.tra.y(), p.rot);
-  NP_CHECK(fabs(p.tra.x() - 1.0f) < 0.01f);
-  NP_CHECK(fabs(p.tra.y() - 0.0f) < 0.01f);
-  NP_CHECK(fabs(p.rot - kPi / 2) < 0.01f);
-
   ParticleFilterWrapper wrapper(MakeMap(), &n);
 
   ros::Subscriber initial_pose_sub = n.subscribe(

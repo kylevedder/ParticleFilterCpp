@@ -48,7 +48,7 @@ class ParticleFilter {
   bool initialized_;
   std::random_device rd_;
   std::mt19937 gen_;
-  static constexpr int kNumParticles = 200;
+  static constexpr int kNumParticles = 50;
   std::array<Particle, kNumParticles> particles_;
   MotionModel motion_model_;
   SensorModel sensor_model_;
