@@ -28,6 +28,16 @@
 
 namespace math_util {
 
+template <typename T>
+T Sin(const T& angle) {
+  return sin(angle);
+}
+
+template <typename T>
+T Cos(const T& angle) {
+  return cos(angle);
+}
+
 // Convert angle in radians to degrees.
 template <typename T>
 T Clamp(const T value, const T min, const T max) {
@@ -108,6 +118,30 @@ T Ramp(const T x, const T x_min, const T x_max, const T y_min, const T y_max) {
     return y_max;
   }
   return (y_min + (x - x_min) / (x_max - x_min) * (y_max - y_min));
+}
+
+template <typename T>
+T ProbabilityDensityGuassian(const T& sample, const T& mean, const T& stddev) {
+  return 1.0 / sqrt(2 * Sq(stddev) * M_PI) *
+         exp(-Sq(sample - mean) / (2 * Sq(stddev)));
+}
+
+template <typename T>
+T ProbabilityDensityExp(const T& sample, const T& lambda) {
+  if (sample > 0) {
+    return lambda * exp(-lambda * sample);
+  } else {
+    return 0;
+  }
+}
+
+template <typename T>
+T ProbabilityDensityUniform(const T& sample, const T& min, const T& max) {
+  if (sample >= min && sample <= max) {
+    return 1.0 / (max - min);
+  } else {
+    return 0;
+  }
 }
 
 // Solve the quadratic polynomial a * x^2 + b * x + c = 0, and return the

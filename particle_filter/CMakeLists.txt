@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(particle_filter)
 
+set(CMAKE_CXX_COMPILER "clang++")
+set(CMAKE_C_COMPILER "clang")
+
 ## Compile as C++11, supported in ROS Kinetic and newer
 add_compile_options(-std=c++11 -g -Wall -Werror)
 

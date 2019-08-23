@@ -1,7 +1,9 @@
 #include "ros/ros.h"
 
+#include "particle_filter/constants.h"
 #include "particle_filter/particle_filter.h"
 
+#include "particle_filter/array_util.h"
 #include "particle_filter/geometry.h"
 #include "particle_filter/math_util.h"
 
@@ -14,6 +16,8 @@ MotionModel::MotionModel() : rd_(), gen_(rd_()) {}
 util::Pose FollowTrajectory(const util::Pose& pose_global_frame,
                             const float& distance_along_arc,
                             const float& rotation) {
+  NP_CHECK(std::isfinite(distance_along_arc));
+  NP_CHECK(std::isfinite(rotation));
   const Eigen::Rotation2Df robot_to_global_frame(pose_global_frame.rot);
   const Eigen::Vector2f robot_forward_global_frame =
       robot_to_global_frame * Eigen::Vector2f(1, 0);
@@ -45,8 +49,9 @@ util::Pose FollowTrajectory(const util::Pose& pose_global_frame,
 
 util::Pose MotionModel::ForwardPredict(const util::Pose& pose_global_frame,
                                        const float translation_robot_frame,
-                                       const float rotation_robot_frame,
-                                       const Time delta_t) {
+                                       const float rotation_robot_frame) {
+  NP_CHECK(std::isfinite(translation_robot_frame));
+  NP_CHECK(std::isfinite(rotation_robot_frame));
   static constexpr float kDistanceAlongArcStdDev = 0.05f;
   static constexpr float kRotStdDev = 0.4f;
   std::normal_distribution<> distance_along_arc_dist(translation_robot_frame,
@@ -59,8 +64,108 @@ util::Pose MotionModel::ForwardPredict(const util::Pose& pose_global_frame,
   return FollowTrajectory(pose_global_frame, distance_along_arc, rotation);
 }
 
-ParticleFilter::ParticleFilter(const util::Pose& start_pose)
-    : start_pose_(start_pose) {}
+SensorModel::SensorModel(const util::Map& map)
+    : rd_(), gen_(rd_()), map_(map) {}
 
-void ParticleFilter::UpdateOdom(const util::Pose& odom_delta) {}
+float GetDepthProbability(const float& sensor_reading, const float& map_reading,
+                          const float& ray_min, const float& ray_max) {
+  return math_util::ProbabilityDensityExp(sensor_reading, 0.01f) +
+         math_util::ProbabilityDensityGuassian(sensor_reading, map_reading,
+                                               0.01f) *
+             4 +
+         math_util::ProbabilityDensityUniform(sensor_reading, ray_min,
+                                              ray_max) *
+             0.1 +
+         math_util::ProbabilityDensityUniform(sensor_reading, ray_max - 0.01f,
+                                              ray_max) *
+             0.02;
+}
+
+float SensorModel::GetProbability(const util::Pose& pose_global_frame,
+                                  const util::LaserScan& laser_scan) const {
+  float probability_sum = 0;
+
+  const float& range_min = laser_scan.ros_laser_scan_.range_min;
+  const float& range_max = laser_scan.ros_laser_scan_.range_max;
+
+  for (size_t i = 0; i < laser_scan.ros_laser_scan_.ranges.size(); ++i) {
+    const float& range = laser_scan.ros_laser_scan_.ranges[i];
+    if (!std::isfinite(range) || range < kMinReading || range > kMaxReading) {
+      continue;
+    }
+    const Eigen::Vector2f endpoint =
+        laser_scan.GetRayEndpoint(i, pose_global_frame);
+    const Eigen::Vector2f& startpoint = pose_global_frame.tra;
+    const float distance_to_map_wall =
+        std::max(map_.MinDistanceAlongRay(startpoint, endpoint), range_min);
+
+    probability_sum +=
+        GetDepthProbability(range, distance_to_map_wall, range_min, range_max);
+  }
+  return probability_sum / laser_scan.ros_laser_scan_.ranges.size();
+}
+
+ParticleFilter::ParticleFilter(const util::Map& map)
+    : initialized_(false), rd_(), gen_(rd_()), sensor_model_(map) {}
+
+ParticleFilter::ParticleFilter(const util::Map& map,
+                               const util::Pose& start_pose)
+    : initialized_(true), rd_(), gen_(rd_()), sensor_model_(map) {
+  InitalizePose(start_pose);
+}
+
+void ParticleFilter::InitalizePose(const util::Pose& start_pose) {
+  for (Particle& p : particles_) {
+    p = Particle(start_pose, 1.0f);
+  }
+  initialized_ = true;
+}
+
+void ParticleFilter::UpdateOdom(const float& translation,
+                                const float& rotation) {
+  if (!initialized_) {
+    ROS_WARN("Particle filter not initialized yet!");
+    return;
+  }
+  for (Particle& p : particles_) {
+    p.pose = motion_model_.ForwardPredict(p.pose, translation, rotation);
+  }
+}
+
+void ParticleFilter::UpdateObservation(const util::LaserScan& laser_scan) {
+  if (!initialized_) {
+    ROS_WARN("Particle filter not initialized yet!");
+    return;
+  }
+
+  for (Particle& p : particles_) {
+    p.weight = sensor_model_.GetProbability(p.pose, laser_scan);
+  }
+
+  const float total_weights = [this]() -> float {
+    float sum = 0;
+    for (const auto& p : particles_) {
+      sum += p.weight;
+    }
+    return sum;
+  }();
+
+  std::uniform_real_distribution<> distribution(0.0f, total_weights);
+
+  auto resampled_particles = particles_;
+  for (Particle& new_p : resampled_particles) {
+    float weight_sample = distribution(gen_);
+    NP_CHECK(weight_sample < total_weights);
+    for (const Particle& old_p : particles_) {
+      if (weight_sample <= old_p.weight) {
+        new_p = old_p;
+        break;
+      }
+      weight_sample -= old_p.weight;
+    }
+  }
+
+  particles_ = resampled_particles;
+}
+
 }  // namespace localization

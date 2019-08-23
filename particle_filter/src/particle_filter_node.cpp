@@ -1,3 +1,4 @@
+#include "geometry_msgs/Twist.h"
 #include "ros/ros.h"
 #include "sensor_msgs/LaserScan.h"
 
@@ -12,51 +13,59 @@
 
 #include <visualization_msgs/Marker.h>
 
-localization::MotionModel m;
-
 ros::Publisher marker_pub;
 
-void LaserCallback(const sensor_msgs::LaserScan::ConstPtr& msg) {
-  ROS_INFO("Got laser");
+util::Map MakeMap() {
+  util::Map m;
+  m.walls.push_back({{-10, 2}, {10, 2}});
+  m.walls.push_back({{-10, -2}, {10, -2}});
+  m.walls.push_back({{-10, -2}, {-10, 2}});
+  m.walls.push_back({{10, -2}, {10, 2}});
+  return m;
+}
 
-  const auto pred_pose = m.ForwardPredict({{0, 0}, 0}, 2.0f, 0.5, 0.1f);
+struct ParticleFilterWrapper {
+  localization::ParticleFilter particle_filter;
 
-  visualization_msgs::Marker points;
-  points.header.frame_id = "/map";
-  points.header.stamp = ros::Time::now();
-  points.ns = "points_and_lines";
-  points.action = visualization_msgs::Marker::ADD;
-  points.pose.orientation.w = 1.0;
+  ParticleFilterWrapper() = delete;
+  explicit ParticleFilterWrapper(const util::Map& map) : particle_filter(map) {}
 
-  static int id_ctr = 0;
-  points.id = id_ctr++;
+  void StartCallback(const geometry_msgs::Twist::ConstPtr& msg) {
+    ROS_INFO("Got Start");
+    util::Pose start(*msg);
+    particle_filter.InitalizePose(start);
+  }
 
-  points.type = visualization_msgs::Marker::POINTS;
-  points.scale.x = 0.05;
-  points.scale.y = 0.05;
+  void LaserCallback(const sensor_msgs::LaserScan::ConstPtr& msg) {
+    util::LaserScan laser(*msg);
+    particle_filter.UpdateObservation(laser);
+  }
 
-  points.color.r = 1;
-  points.color.g = 0.882f;
-  points.color.b = 0.208f;
-  points.color.a = 1.0;
+  void OdomCallback(const geometry_msgs::Twist::ConstPtr& msg) {
+    util::Pose odom(*msg);
+    particle_filter.UpdateOdom(odom.tra.x(), odom.rot);
+  }
+};
 
-  geometry_msgs::Point p;
-  p.x = pred_pose.tra.x();
-  p.y = pred_pose.tra.y();
-  p.z = 0;
-
-  points.points.push_back(p);
-  marker_pub.publish(points);
-  ROS_INFO("Published to %f, %f", pred_pose.tra.x(), pred_pose.tra.y());
+void StartCallbackTmp(const geometry_msgs::Twist::ConstPtr& msg) {
+  ROS_INFO("Got Start Tmp");
 }
 
 int main(int argc, char** argv) {
   ros::init(argc, argv, "particle_filter");
 
+  ParticleFilterWrapper wrapper(MakeMap());
+
   ros::NodeHandle n;
   marker_pub = n.advertise<visualization_msgs::Marker>("motion_model", 10);
 
-  ros::Subscriber sub = n.subscribe("laser", 1000, LaserCallback);
+  ros::Subscriber initial_pose_sub =
+      n.subscribe("initial_pose", 1000, StartCallbackTmp);
+  // ros::Subscriber laser_sub = n.subscribe(
+  //     "laser", 1000, &ParticleFilterWrapper::LaserCallback, &wrapper);
+  // ros::Subscriber odom_sub =
+  //     n.subscribe("odom", 1000, &ParticleFilterWrapper::OdomCallback,
+  //     &wrapper);
 
   ros::spin();
 

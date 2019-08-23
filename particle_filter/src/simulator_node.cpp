@@ -1,33 +1,17 @@
+#include "geometry_msgs/Twist.h"
 #include "ros/ros.h"
 #include "sensor_msgs/LaserScan.h"
 
 #include "eigen3/Eigen/Core"
 #include "eigen3/Eigen/Geometry"
 
+#include "particle_filter/constants.h"
 #include "particle_filter/geometry.h"
+#include "particle_filter/map.h"
 #include "particle_filter/math_util.h"
 #include "particle_filter/pose.h"
 
 #include <cmath>
-
-static constexpr float kMinAngle = -kPi / 2;
-static constexpr float kMaxAngle = kPi / 2;
-static constexpr int kNumReadings = 100;
-static constexpr float kAngleDelta =
-    std::abs(kMaxAngle - kMinAngle) / static_cast<float>(kNumReadings - 1);
-static constexpr float kMinReading = 0.1f;
-static constexpr float kMaxReading = 5.0f;
-
-struct Wall {
-  Eigen::Vector2f p1;
-  Eigen::Vector2f p2;
-  Wall() : p1(), p2(){};
-  Wall(const Eigen::Vector2f& p1, const Eigen::Vector2f& p2) : p1(p1), p2(p2){};
-};
-
-struct Map {
-  std::vector<Wall> walls;
-};
 
 std_msgs::Header MakeHeader() {
   static uint32_t seq = 0;
@@ -38,10 +22,10 @@ std_msgs::Header MakeHeader() {
   return header;
 }
 
-Eigen::Vector2f GetRayReturn(const util::Pose& ray, const Map& map) {
+Eigen::Vector2f GetRayReturn(const util::Pose& ray, const util::Map& map) {
   Eigen::Vector2f delta =
       Eigen::Rotation2Df(ray.rot) * Eigen::Vector2f(kMaxReading - kEpsilon, 0);
-  for (const Wall& w : map.walls) {
+  for (const util::Wall& w : map.walls) {
     const Eigen::Vector2f& ray_start = ray.tra;
     const Eigen::Vector2f& ray_end = ray.tra + delta;
     const auto res =
@@ -61,7 +45,8 @@ Eigen::Vector2f GetRayReturn(const util::Pose& ray, const Map& map) {
   return delta;
 }
 
-sensor_msgs::LaserScan MakeScan(const util::Pose& robot_pose, const Map& map) {
+sensor_msgs::LaserScan MakeScan(const util::Pose& robot_pose,
+                                const util::Map& map) {
   sensor_msgs::LaserScan scan;
   scan.header = MakeHeader();
   scan.angle_min = kMinAngle;
@@ -84,9 +69,12 @@ sensor_msgs::LaserScan MakeScan(const util::Pose& robot_pose, const Map& map) {
   return scan;
 }
 
-Map MakeMap() {
-  Map m;
-  m.walls = {{{2, 2}, {2, -1}}, {{-1, 2}, {2, 2}}, {{-1, -1}, {2, -1}}};
+util::Map MakeMap() {
+  util::Map m;
+  m.walls.push_back({{-10, 2}, {10, 2}});
+  m.walls.push_back({{-10, -2}, {10, -2}});
+  m.walls.push_back({{-10, -2}, {-10, 2}});
+  m.walls.push_back({{10, -2}, {10, 2}});
   return m;
 }
 
@@ -95,23 +83,40 @@ int main(int argc, char** argv) {
 
   ros::NodeHandle n;
 
-  ros::Publisher scan_pub = n.advertise<sensor_msgs::LaserScan>("laser", 1000);
+  ros::Publisher initial_pose_pub =
+      n.advertise<geometry_msgs::Twist>("initial_pose", 100);
+  ros::Publisher scan_pub = n.advertise<sensor_msgs::LaserScan>("laser", 10);
+  ros::Publisher odom_pub = n.advertise<geometry_msgs::Twist>("odom", 10);
 
   ros::Rate loop_rate(10);
 
-  const Map map = MakeMap();
+  const util::Map map = MakeMap();
+
+  util::Pose current_pose({0, 0}, 0);
+
+  for (size_t i = 0; i < 20; ++i) {
+    initial_pose_pub.publish(current_pose.ToTwist());
+    ros::spinOnce();
+    ROS_INFO("Published start!");
+  }
 
   int iteration = 0;
   while (ros::ok()) {
-    ++iteration;
-    const float angle = math_util::AngleMod(iteration / 10.0f);
-    const Eigen::Vector2f offset =
-        Eigen::Rotation2Df(angle) * Eigen::Vector2f(1, 0);
-    const sensor_msgs::LaserScan scan =
-        MakeScan({offset, math_util::AngleMod(angle * 2)}, map);
+    if (iteration >= 200) {
+      iteration = 0;
+    }
+
+    const util::Pose move = ((iteration < 100) ? util::Pose({-0.05, 0}, 0)
+                                               : util::Pose({0.05, 0}, 0));
+    // ROS_INFO("Translate: %f Rotate %f", move.tra.x(), move.rot);
+    current_pose = current_pose + move;
+
+    const sensor_msgs::LaserScan scan = MakeScan(current_pose, map);
     scan_pub.publish(scan);
+    odom_pub.publish(move.ToTwist());
     ros::spinOnce();
     loop_rate.sleep();
+    ++iteration;
   }
 
   return 0;
