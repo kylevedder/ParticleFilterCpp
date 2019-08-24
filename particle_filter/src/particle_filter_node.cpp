@@ -94,7 +94,6 @@ struct ParticleFilterWrapper {
       return;
     }
     particle_filter.InitalizePose(start_pose);
-    ROS_INFO("Initialized Particle Filter");
   }
 
   void LaserCallback(const sensor_msgs::LaserScan::ConstPtr& msg) {
