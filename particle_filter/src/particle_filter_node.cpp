@@ -13,15 +13,6 @@
 
 #include <visualization_msgs/MarkerArray.h>
 
-util::Map MakeMap() {
-  util::Map m;
-  m.walls.push_back({{-10, 2}, {10, 2}});
-  m.walls.push_back({{-10, -2}, {10, -2}});
-  m.walls.push_back({{-10, -2}, {-10, 2}});
-  m.walls.push_back({{10, -2}, {10, 2}});
-  return m;
-}
-
 void DrawGroundTruth(const util::Pose& ground_truth,
                      ros::Publisher* ground_truth_pub) {
   {
@@ -114,7 +105,8 @@ int main(int argc, char** argv) {
 
   ros::NodeHandle n;
 
-  ParticleFilterWrapper wrapper(MakeMap(), &n);
+  ParticleFilterWrapper wrapper(
+      util::Map("src/particle_filter/maps/rectangle.map"), &n);
 
   ros::Subscriber initial_pose_sub = n.subscribe(
       "true_pose", 1000, &ParticleFilterWrapper::StartCallback, &wrapper);

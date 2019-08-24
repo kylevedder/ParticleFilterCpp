@@ -5,6 +5,7 @@
 
 #include "geometry.h"
 
+#include <string>
 #include <vector>
 
 namespace util {
@@ -18,6 +19,9 @@ struct Wall {
 
 struct Map {
   std::vector<Wall> walls;
+
+  Map() = default;
+  explicit Map(const std::string& filepath);
 
   float MinDistanceAlongRay(const Eigen::Vector2f& ray_start,
                             const Eigen::Vector2f& ray_end) const {

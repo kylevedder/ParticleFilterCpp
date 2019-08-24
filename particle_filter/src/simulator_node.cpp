@@ -79,15 +79,6 @@ sensor_msgs::LaserScan MakeScan(const util::Pose& robot_pose,
   return scan;
 }
 
-util::Map MakeMap() {
-  util::Map m;
-  m.walls.push_back({{-10, 2}, {10, 2}});
-  m.walls.push_back({{-10, -2}, {10, -2}});
-  m.walls.push_back({{-10, -2}, {-10, 2}});
-  m.walls.push_back({{10, -2}, {10, 2}});
-  return m;
-}
-
 int main(int argc, char** argv) {
   ros::init(argc, argv, "simulator");
 
@@ -100,7 +91,7 @@ int main(int argc, char** argv) {
 
   ros::Rate loop_rate(6);
 
-  const util::Map map = MakeMap();
+  const util::Map map("src/particle_filter/maps/rectangle.map");
   util::Pose current_pose({8, 0}, 0);
 
   int iteration = 0;
