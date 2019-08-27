@@ -5,11 +5,12 @@
 #include "eigen3/Eigen/Core"
 #include "eigen3/Eigen/Geometry"
 
+#include <signal.h>
+#include <cmath>
+#include "particle_filter/crash_handling.h"
 #include "particle_filter/geometry.h"
 #include "particle_filter/math_util.h"
 #include "particle_filter/particle_filter.h"
-
-#include <cmath>
 
 #include <visualization_msgs/MarkerArray.h>
 
@@ -104,12 +105,27 @@ struct ParticleFilterWrapper {
 };
 
 int main(int argc, char** argv) {
-  ros::init(argc, argv, "particle_filter");
+  ros::init(argc, argv, "particle_filter", ros::init_options::NoSigintHandler);
+
+  if (signal(SIGINT, FatalSignalHandler) == SIG_ERR) {
+    std::cerr << "Cannot trap SIGINT" << std::endl;
+    exit(-1);
+  }
+  if (signal(SIGSEGV, FatalSignalHandler) == SIG_ERR) {
+    std::cerr << "Cannot trap SIGSEGV" << std::endl;
+    exit(-1);
+  }
+  if (signal(SIGABRT, FatalSignalHandler) == SIG_ERR) {
+    std::cerr << "Cannot trap SIGABRT" << std::endl;
+    exit(-1);
+  }
 
   ros::NodeHandle n;
 
   ParticleFilterWrapper wrapper(
-      util::Map("src/particle_filter/maps/rectangle.map"), &n);
+      util::Map(
+          "/home/k/code/catkin_ws/src/particle_filter/maps/rectangle.map"),
+      &n);
 
   ros::Subscriber initial_pose_sub = n.subscribe(
       "true_pose", 1000, &ParticleFilterWrapper::StartCallback, &wrapper);

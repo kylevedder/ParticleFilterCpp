@@ -38,9 +38,9 @@ struct Pose {
   }
 
   Eigen::Affine2f ToAffine() const {
-    Eigen::Affine2f transform;
-    transform.rotate(rot);
+    Eigen::Affine2f transform(Eigen::Affine2f::Identity());
     transform.translate(tra);
+    transform.rotate(rot);
     return transform;
   }
 };

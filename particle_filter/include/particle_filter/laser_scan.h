@@ -13,27 +13,40 @@ namespace util {
 class LaserScan {
  public:
   sensor_msgs::LaserScan ros_laser_scan_;
-  std::vector<Eigen::Vector2f> robot_frame_points_;
 
-  LaserScan() = delete;
+  LaserScan() = default;
   explicit LaserScan(const sensor_msgs::LaserScan& ros_laser_scan)
-      : ros_laser_scan_(ros_laser_scan),
-        robot_frame_points_(ros_laser_scan_.ranges.size()) {
+      : ros_laser_scan_(ros_laser_scan) {}
+
+  bool IsEmpty() const { return ros_laser_scan_.ranges.empty(); }
+
+  std::vector<Eigen::Vector2f> TransformPointsFrameSparse(
+      const Eigen::Affine2f& transform) const {
+    std::vector<Eigen::Vector2f> robot_frame_points;
     for (size_t i = 0; i < ros_laser_scan_.ranges.size(); ++i) {
+      const float& depth = ros_laser_scan_.ranges[i];
+      if (!std::isfinite(depth)) {
+        continue;
+      }
+      if (depth > ros_laser_scan_.range_max / 4.0f) {
+        continue;
+      }
       const float theta =
           ros_laser_scan_.angle_min + i * ros_laser_scan_.angle_increment;
-      const float& depth = ros_laser_scan_.ranges[i];
-      robot_frame_points_[i] = {sin(theta) * depth, cos(theta) * depth};
+      const Eigen::Vector2f point(sin(theta) * depth, cos(theta) * depth);
+      NP_FINITE(point.x());
+      NP_FINITE(point.y());
+      robot_frame_points.push_back(point);
     }
-  }
 
-  std::vector<Eigen::Vector2f> TransformPointsFrame(
-      const Eigen::Affine2f& transform) const {
-    auto transformed_points = robot_frame_points_;
-    for (auto& point : transformed_points) {
+    for (auto& point : robot_frame_points) {
+      NP_FINITE(point.x());
+      NP_FINITE(point.y());
       point = transform * point;
+      NP_FINITE(point.x());
+      NP_FINITE(point.y());
     }
-    return transformed_points;
+    return robot_frame_points;
   }
 
   Eigen::Vector2f GetRayEndpoint(const size_t ray_index,

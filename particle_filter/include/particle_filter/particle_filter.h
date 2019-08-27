@@ -38,10 +38,12 @@ class SensorModel {
 
 struct Particle {
   util::Pose pose;
+  util::Pose prev_pose;
+  util::LaserScan prev_filtered_laser;
   float weight;
   Particle() : pose(), weight(0.0f) {}
   Particle(const util::Pose& pose, const float weight)
-      : pose(pose), weight(weight) {}
+      : pose(pose), prev_pose(pose), weight(weight) {}
 
   bool operator==(const Particle& other) const {
     return (pose == other.pose) && (weight == other.weight);
@@ -53,10 +55,14 @@ class ParticleFilter {
   bool initialized_;
   std::random_device rd_;
   std::mt19937 gen_;
-  static constexpr int kNumParticles = 20;
-  std::array<Particle, kNumParticles> particles_;
+  static constexpr int kNumParticles = 50;
+  using ParticleArray = std::array<Particle, kNumParticles>;
+  ParticleArray particles_;
   MotionModel motion_model_;
   SensorModel sensor_model_;
+
+  util::LaserScan ReweightParticles(const util::LaserScan& laser_scan);
+  void ResampleParticles();
 
  public:
   ParticleFilter() = delete;

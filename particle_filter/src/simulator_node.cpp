@@ -89,7 +89,7 @@ int main(int argc, char** argv) {
   ros::Publisher scan_pub = n.advertise<sensor_msgs::LaserScan>("laser", 10);
   ros::Publisher odom_pub = n.advertise<geometry_msgs::Twist>("odom", 10);
 
-  ros::Rate loop_rate(6);
+  ros::Rate loop_rate(2);
 
   const util::Map map("src/particle_filter/maps/rectangle_small_bump.map");
   util::Pose current_pose({8, 0}, 0);

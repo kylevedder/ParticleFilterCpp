@@ -7,7 +7,10 @@ namespace util {
 
 Map::Map(const std::string& filepath) {
   std::fstream map_file(filepath);
-  NP_CHECK(map_file.is_open());
+  if (!map_file.is_open()) {
+    std::cerr << "Failed to open " << filepath << std::endl;
+  }
+  CHECK(map_file.is_open());
 
   std::string line;
   while (std::getline(map_file, line)) {

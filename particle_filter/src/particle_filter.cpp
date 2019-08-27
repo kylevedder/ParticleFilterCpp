@@ -60,15 +60,15 @@ float GetDepthProbability(const float& sensor_reading, const float& map_reading,
 float SensorModel::GetProbability(const util::Pose& pose_global_frame,
                                   const util::LaserScan& laser_scan,
                                   util::LaserScan* filtered_laser_scan) const {
+  NP_NOT_NULL(filtered_laser_scan);
   if (laser_scan.ros_laser_scan_.ranges.empty()) {
     return 0;
   }
+
   float probability_sum = 0;
 
   const float& range_min = laser_scan.ros_laser_scan_.range_min;
   const float& range_max = laser_scan.ros_laser_scan_.range_max;
-
-  std::vector<float> probabilities;
 
   for (size_t i = 0; i < laser_scan.ros_laser_scan_.ranges.size(); ++i) {
     float range = laser_scan.ros_laser_scan_.ranges[i];
@@ -92,18 +92,11 @@ float SensorModel::GetProbability(const util::Pose& pose_global_frame,
 
     const float depth_probability =
         GetDepthProbability(range, distance_to_map_wall, range_min, range_max);
-    probabilities.push_back(depth_probability);
-    probability_sum += depth_probability;
-  }
-
-  *filtered_laser_scan = laser_scan;
-  for (size_t i = 0; i < filtered_laser_scan->ros_laser_scan_.ranges.size();
-       ++i) {
-    const float& p = probabilities[i];
-    if (p > 0.0f) {
+    if (depth_probability > 0.0f) {
       (*filtered_laser_scan).ros_laser_scan_.ranges[i] =
           std::numeric_limits<float>::quiet_NaN();
     }
+    probability_sum += depth_probability;
   }
   return probability_sum / laser_scan.ros_laser_scan_.ranges.size();
 }
@@ -120,14 +113,8 @@ ParticleFilter::ParticleFilter(const util::Map& map,
 bool ParticleFilter::IsInitialized() const { return initialized_; }
 
 void ParticleFilter::InitalizePose(const util::Pose& start_pose) {
-  NP_FINITE(start_pose.tra.x());
-  NP_FINITE(start_pose.tra.y());
-  NP_FINITE(start_pose.rot);
   for (Particle& p : particles_) {
     p = Particle(start_pose, 1.0f);
-    NP_FINITE(p.pose.tra.x());
-    NP_FINITE(p.pose.tra.y());
-    NP_FINITE(p.pose.rot);
   }
   initialized_ = true;
 }
@@ -138,42 +125,74 @@ void ParticleFilter::UpdateOdom(const float& translation,
     ROS_WARN("Particle filter not initialized yet!");
     return;
   }
+
   for (Particle& p : particles_) {
-    NP_FINITE(p.pose.tra.x());
-    NP_FINITE(p.pose.tra.y());
-    NP_FINITE(p.pose.rot);
-    NP_FINITE(p.weight);
     p.pose = motion_model_.ForwardPredict(p.pose, translation, rotation);
-    NP_FINITE(p.pose.tra.x());
-    NP_FINITE(p.pose.tra.y());
-    NP_FINITE(p.pose.rot);
-    NP_FINITE(p.weight);
   }
 }
 
-void ParticleFilter::UpdateObservation(const util::LaserScan& laser_scan,
-                                       ros::Publisher* sampled_scan_pub) {
-  if (!initialized_) {
-    ROS_WARN("Particle filter not initialized yet!");
-    return;
+float ScanSimilarity(const util::LaserScan& scan1, const util::Pose& pose1,
+                     const util::LaserScan& scan2, const util::Pose& pose2) {
+  const auto global_points_1 =
+      scan1.TransformPointsFrameSparse(pose1.ToAffine());
+  const auto global_points_2 =
+      scan2.TransformPointsFrameSparse(pose2.ToAffine());
+
+  if (global_points_1.empty() || global_points_2.empty()) {
+    return 0.0f;
   }
 
+  float total_error = 0;
+  for (const Eigen::Vector2f& p1 : global_points_1) {
+    float min_sq_distance = std::numeric_limits<float>::max();
+    for (const Eigen::Vector2f& p2 : global_points_2) {
+      const float candidate_sq = (p1 - p2).squaredNorm();
+      NP_FINITE(p1.x());
+      NP_FINITE(p1.y());
+      NP_FINITE(p2.x());
+      NP_FINITE(p2.y());
+      if (!std::isfinite(candidate_sq)) {
+        std::cout << std::setprecision(20) << std::fixed << p1.x() << p1.y()
+                  << p2.x() << p2.y() << candidate_sq << std::endl;
+      }
+      NP_FINITE(candidate_sq);
+      min_sq_distance = std::min(candidate_sq, min_sq_distance);
+    }
+    NP_FINITE(min_sq_distance);
+    if (min_sq_distance < std::numeric_limits<float>::max()) {
+      total_error += min_sq_distance;
+    }
+    NP_FINITE(total_error);
+  }
+  NP_FINITE(total_error);
+  const float average_error =
+      total_error / static_cast<float>(global_points_1.size());
+  std::cout << "Average error: " << average_error << std::endl;
+  return 0.0f;
+}
+
+util::LaserScan ParticleFilter::ReweightParticles(
+    const util::LaserScan& laser_scan) {
   util::LaserScan filtered_laser_scan = laser_scan;
   for (Particle& p : particles_) {
-    NP_FINITE(p.pose.tra.x());
-    NP_FINITE(p.pose.tra.y());
-    NP_FINITE(p.pose.rot);
-    NP_FINITE(p.weight);
+    filtered_laser_scan = laser_scan;
     p.weight =
         sensor_model_.GetProbability(p.pose, laser_scan, &filtered_laser_scan);
+    const float similarity =
+        ScanSimilarity(laser_scan, p.pose, p.prev_filtered_laser, p.prev_pose);
+    p.weight += similarity;
+
+    p.prev_filtered_laser = filtered_laser_scan;
+    p.prev_pose = p.pose;
+
     NP_FINITE(p.pose.tra.x());
     NP_FINITE(p.pose.tra.y());
     NP_FINITE(p.pose.rot);
-    NP_FINITE(p.weight);
   }
+  return filtered_laser_scan;
+}
 
-  sampled_scan_pub->publish(filtered_laser_scan.ros_laser_scan_);
-
+void ParticleFilter::ResampleParticles() {
   const float total_weights = [this]() -> float {
     float sum = 0;
     for (const auto& p : particles_) {
@@ -200,6 +219,20 @@ void ParticleFilter::UpdateObservation(const util::LaserScan& laser_scan,
   particles_ = resampled_particles;
 }
 
+void ParticleFilter::UpdateObservation(const util::LaserScan& laser_scan,
+                                       ros::Publisher* sampled_scan_pub) {
+  if (!initialized_) {
+    ROS_WARN("Particle filter not initialized yet!");
+    return;
+  }
+
+  const auto filtered_laser_scan = ReweightParticles(laser_scan);
+
+  sampled_scan_pub->publish(filtered_laser_scan.ros_laser_scan_);
+
+  ResampleParticles();
+}
+
 void ParticleFilter::DrawParticles(ros::Publisher* particle_pub) const {
   static visualization_msgs::MarkerArray particle_markers;
   for (visualization_msgs::Marker& marker : particle_markers.markers) {
@@ -212,6 +245,11 @@ void ParticleFilter::DrawParticles(ros::Publisher* particle_pub) const {
     max_weight = std::max(p.weight, max_weight);
   }
   for (const Particle& p : particles_) {
+    NP_FINITE(p.pose.tra.x());
+    NP_FINITE(p.pose.tra.y());
+    NP_FINITE(p.pose.rot);
+    NP_FINITE(p.weight);
+
     {
       visualization_msgs::Marker marker;
       marker.header.frame_id = "map";
