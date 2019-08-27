@@ -15,6 +15,12 @@ struct Pose {
       : tra(twist.linear.x, twist.linear.y), rot(twist.angular.z) {}
   Pose(const Eigen::Vector2f& tra, const float& rot) : tra(tra), rot(rot){};
 
+  bool operator==(const Pose& other) const {
+    return (tra == other.tra) && (rot == other.rot);
+  };
+
+  bool operator!=(const Pose& other) const { return !(*this == other); }
+
   util::Pose operator-(const util::Pose& o) const {
     return {tra - o.tra, math_util::AngleMod(rot - o.rot)};
   }

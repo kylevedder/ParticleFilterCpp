@@ -68,6 +68,7 @@ struct ParticleFilterWrapper {
   localization::ParticleFilter particle_filter;
   ros::Publisher particle_pub;
   ros::Publisher ground_truth_pub;
+  ros::Publisher sampled_laser_pub;
 
   ParticleFilterWrapper() = delete;
   ParticleFilterWrapper(const util::Map& map, ros::NodeHandle* n)
@@ -76,6 +77,8 @@ struct ParticleFilterWrapper {
         n->advertise<visualization_msgs::MarkerArray>("particles", 10);
     ground_truth_pub =
         n->advertise<visualization_msgs::Marker>("ground_truth", 10);
+    sampled_laser_pub =
+        n->advertise<sensor_msgs::LaserScan>("sampled_laser", 100);
   }
 
   void StartCallback(const geometry_msgs::Twist::ConstPtr& msg) {
@@ -89,7 +92,7 @@ struct ParticleFilterWrapper {
 
   void LaserCallback(const sensor_msgs::LaserScan::ConstPtr& msg) {
     util::LaserScan laser(*msg);
-    particle_filter.UpdateObservation(laser);
+    particle_filter.UpdateObservation(laser, &sampled_laser_pub);
     particle_filter.DrawParticles(&particle_pub);
   }
 

@@ -147,6 +147,17 @@ T ProbabilityDensityUniform(const T& sample, const T& min, const T& max) {
   }
 }
 
+template <typename Container, typename Type>
+Type GetPercentile(Container c, const float percentile) {
+  NP_CHECK(percentile >= 0);
+  NP_CHECK(percentile <= 1.0f);
+  std::sort(c.begin(), c.end());
+  const size_t idx =
+      static_cast<size_t>(static_cast<float>(c.size()) * percentile);
+  const Type& val = c[idx];
+  return val;
+}
+
 // Solve the quadratic polynomial a * x^2 + b * x + c = 0, and return the
 // two real roots as r0 and r1, where r0 is less than or equal to r1. The return
 // value is the number of unique real roots found.

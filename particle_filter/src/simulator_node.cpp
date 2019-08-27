@@ -91,7 +91,7 @@ int main(int argc, char** argv) {
 
   ros::Rate loop_rate(6);
 
-  const util::Map map("src/particle_filter/maps/rectangle.map");
+  const util::Map map("src/particle_filter/maps/rectangle_small_bump.map");
   util::Pose current_pose({8, 0}, 0);
 
   int iteration = 0;

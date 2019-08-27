@@ -32,7 +32,8 @@ class SensorModel {
  public:
   SensorModel(const util::Map& map);
   float GetProbability(const util::Pose& pose_global_frame,
-                       const util::LaserScan& laser_scan) const;
+                       const util::LaserScan& laser_scan,
+                       util::LaserScan* filtered_laser_scan) const;
 };
 
 struct Particle {
@@ -41,6 +42,10 @@ struct Particle {
   Particle() : pose(), weight(0.0f) {}
   Particle(const util::Pose& pose, const float weight)
       : pose(pose), weight(weight) {}
+
+  bool operator==(const Particle& other) const {
+    return (pose == other.pose) && (weight == other.weight);
+  }
 };
 
 class ParticleFilter {
@@ -48,7 +53,7 @@ class ParticleFilter {
   bool initialized_;
   std::random_device rd_;
   std::mt19937 gen_;
-  static constexpr int kNumParticles = 50;
+  static constexpr int kNumParticles = 20;
   std::array<Particle, kNumParticles> particles_;
   MotionModel motion_model_;
   SensorModel sensor_model_;
@@ -63,7 +68,8 @@ class ParticleFilter {
   void InitalizePose(const util::Pose& start_pose);
 
   void UpdateOdom(const float& translation, const float& rotation);
-  void UpdateObservation(const util::LaserScan& laser_scan);
+  void UpdateObservation(const util::LaserScan& laser_scan,
+                         ros::Publisher* sampled_scan_pub);
 
   void DrawParticles(ros::Publisher* particle_pub) const;
 };

@@ -9,6 +9,9 @@
 
 #include "visualization_msgs/MarkerArray.h"
 
+#include <iomanip>
+#include <limits>
+
 #include "eigen3/Eigen/Geometry"
 
 namespace localization {
@@ -55,7 +58,8 @@ float GetDepthProbability(const float& sensor_reading, const float& map_reading,
 }
 
 float SensorModel::GetProbability(const util::Pose& pose_global_frame,
-                                  const util::LaserScan& laser_scan) const {
+                                  const util::LaserScan& laser_scan,
+                                  util::LaserScan* filtered_laser_scan) const {
   if (laser_scan.ros_laser_scan_.ranges.empty()) {
     return 0;
   }
@@ -63,6 +67,8 @@ float SensorModel::GetProbability(const util::Pose& pose_global_frame,
 
   const float& range_min = laser_scan.ros_laser_scan_.range_min;
   const float& range_max = laser_scan.ros_laser_scan_.range_max;
+
+  std::vector<float> probabilities;
 
   for (size_t i = 0; i < laser_scan.ros_laser_scan_.ranges.size(); ++i) {
     float range = laser_scan.ros_laser_scan_.ranges[i];
@@ -84,8 +90,20 @@ float SensorModel::GetProbability(const util::Pose& pose_global_frame,
     NP_CHECK(range_min - kEpsilon <= distance_to_map_wall);
     NP_CHECK(distance_to_map_wall <= range_max + kEpsilon);
 
-    probability_sum +=
+    const float depth_probability =
         GetDepthProbability(range, distance_to_map_wall, range_min, range_max);
+    probabilities.push_back(depth_probability);
+    probability_sum += depth_probability;
+  }
+
+  *filtered_laser_scan = laser_scan;
+  for (size_t i = 0; i < filtered_laser_scan->ros_laser_scan_.ranges.size();
+       ++i) {
+    const float& p = probabilities[i];
+    if (p > 0.0f) {
+      (*filtered_laser_scan).ros_laser_scan_.ranges[i] =
+          std::numeric_limits<float>::quiet_NaN();
+    }
   }
   return probability_sum / laser_scan.ros_laser_scan_.ranges.size();
 }
@@ -133,23 +151,28 @@ void ParticleFilter::UpdateOdom(const float& translation,
   }
 }
 
-void ParticleFilter::UpdateObservation(const util::LaserScan& laser_scan) {
+void ParticleFilter::UpdateObservation(const util::LaserScan& laser_scan,
+                                       ros::Publisher* sampled_scan_pub) {
   if (!initialized_) {
     ROS_WARN("Particle filter not initialized yet!");
     return;
   }
 
+  util::LaserScan filtered_laser_scan = laser_scan;
   for (Particle& p : particles_) {
     NP_FINITE(p.pose.tra.x());
     NP_FINITE(p.pose.tra.y());
     NP_FINITE(p.pose.rot);
     NP_FINITE(p.weight);
-    p.weight = sensor_model_.GetProbability(p.pose, laser_scan);
+    p.weight =
+        sensor_model_.GetProbability(p.pose, laser_scan, &filtered_laser_scan);
     NP_FINITE(p.pose.tra.x());
     NP_FINITE(p.pose.tra.y());
     NP_FINITE(p.pose.rot);
     NP_FINITE(p.weight);
   }
+
+  sampled_scan_pub->publish(filtered_laser_scan.ros_laser_scan_);
 
   const float total_weights = [this]() -> float {
     float sum = 0;
