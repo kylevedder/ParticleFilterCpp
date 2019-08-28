@@ -28,9 +28,7 @@ class LaserScan {
       if (!std::isfinite(depth)) {
         continue;
       }
-      if (depth > ros_laser_scan_.range_max / 4.0f) {
-        continue;
-      }
+
       const float theta =
           ros_laser_scan_.angle_min + i * ros_laser_scan_.angle_increment;
       const Eigen::Vector2f point(sin(theta) * depth, cos(theta) * depth);

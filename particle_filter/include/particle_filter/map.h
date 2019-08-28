@@ -3,7 +3,7 @@
 #include "eigen3/Eigen/Core"
 #include "eigen3/Eigen/Geometry"
 
-#include "geometry.h"
+#include "particle_filter/geometry.h"
 
 #include <string>
 #include <vector>

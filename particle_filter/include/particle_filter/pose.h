@@ -4,7 +4,7 @@
 #include "eigen3/Eigen/Geometry"
 
 #include "geometry_msgs/Twist.h"
-#include "math_util.h"
+#include "particle_filter/math_util.h"
 
 namespace util {
 struct Pose {

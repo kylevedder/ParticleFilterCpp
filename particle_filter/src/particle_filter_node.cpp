@@ -11,65 +11,27 @@
 #include "particle_filter/geometry.h"
 #include "particle_filter/math_util.h"
 #include "particle_filter/particle_filter.h"
+#include "particle_filter/visualization.h"
 
 #include <visualization_msgs/MarkerArray.h>
+#include <fstream>
 
 void DrawGroundTruth(const util::Pose& ground_truth,
                      ros::Publisher* ground_truth_pub) {
-  {
-    visualization_msgs::Marker marker;
-    marker.header.frame_id = "map";
-    marker.header.stamp = ros::Time();
-    marker.ns = "ground_truth_body";
-    marker.id = 0;
-    marker.type = visualization_msgs::Marker::SPHERE;
-    marker.action = visualization_msgs::Marker::ADD;
-    marker.pose.position.x = ground_truth.tra.x();
-    marker.pose.position.y = ground_truth.tra.y();
-    marker.pose.position.z = 0;
-    marker.scale.x = 0.1;
-    marker.scale.y = 0.1;
-    marker.scale.z = 0.1;
-    marker.color.a = 1.0;
-    marker.color.r = 0.0;
-    marker.color.g = 1.0;
-    marker.color.b = 0.0;
-    ground_truth_pub->publish(marker);
-  }
-  {
-    visualization_msgs::Marker marker;
-    marker.header.frame_id = "map";
-    marker.header.stamp = ros::Time();
-    marker.ns = "ground_truth_arrow";
-    marker.id = 0;
-    marker.type = visualization_msgs::Marker::ARROW;
-    marker.action = visualization_msgs::Marker::ADD;
-    geometry_msgs::Point start;
-    start.x = ground_truth.tra.x();
-    start.y = ground_truth.tra.y();
-    geometry_msgs::Point end;
-    const Eigen::Vector2f delta(math_util::Cos(ground_truth.rot) * 0.4f,
-                                math_util::Sin(ground_truth.rot) * 0.4f);
-    end.x = ground_truth.tra.x() + delta.x();
-    end.y = ground_truth.tra.y() + delta.y();
-    marker.points.push_back(start);
-    marker.points.push_back(end);
-    marker.scale.x = 0.02;
-    marker.scale.y = 0.1;
-    marker.scale.z = 0.1;
-    marker.color.a = 1.0;
-    marker.color.r = 0.0;
-    marker.color.g = 1.0;
-    marker.color.b = 0.0;
-    ground_truth_pub->publish(marker);
-  }
+  visualization_msgs::MarkerArray arr;
+  visualization::DrawPose(ground_truth, "map", "ground_truth", 0, 1, 0, 1,
+                          &arr);
+  ground_truth_pub->publish(arr);
 }
 
 struct ParticleFilterWrapper {
   localization::ParticleFilter particle_filter;
+  util::Pose ground_truth;
   ros::Publisher particle_pub;
   ros::Publisher ground_truth_pub;
   ros::Publisher sampled_laser_pub;
+
+  static constexpr auto kErrorFile = "error.csv";
 
   ParticleFilterWrapper() = delete;
   ParticleFilterWrapper(const util::Map& map, ros::NodeHandle* n)
@@ -77,24 +39,48 @@ struct ParticleFilterWrapper {
     particle_pub =
         n->advertise<visualization_msgs::MarkerArray>("particles", 10);
     ground_truth_pub =
-        n->advertise<visualization_msgs::Marker>("ground_truth", 10);
+        n->advertise<visualization_msgs::MarkerArray>("ground_truth", 10);
     sampled_laser_pub =
         n->advertise<sensor_msgs::LaserScan>("sampled_laser", 100);
+    std::ofstream out(kErrorFile, std::fstream::out);
+    out << "max_error_x,max_error_y,max_error_norm,max_error_theta,cent_error_"
+           "x,cent_error_y,cent_error_norm,cent_error_theta\n";
+    out.close();
   }
 
   void StartCallback(const geometry_msgs::Twist::ConstPtr& msg) {
-    util::Pose start_pose(*msg);
-    DrawGroundTruth(start_pose, &ground_truth_pub);
+    ground_truth = util::Pose(*msg);
+    DrawGroundTruth(ground_truth, &ground_truth_pub);
     if (particle_filter.IsInitialized()) {
       return;
     }
-    particle_filter.InitalizePose(start_pose);
+    particle_filter.InitalizePose(ground_truth);
+  }
+
+  void WriteError(const util::Pose& max_estimate_error,
+                  const util::Pose& weighted_centroid_error) const {
+    std::ofstream out(kErrorFile, std::fstream::out | std::fstream::app);
+    out << max_estimate_error.tra.x() << ", ";
+    out << max_estimate_error.tra.y() << ", ";
+    out << max_estimate_error.tra.norm() << ", ";
+    out << max_estimate_error.rot << ", ";
+    out << weighted_centroid_error.tra.x() << ", ";
+    out << weighted_centroid_error.tra.y() << ", ";
+    out << weighted_centroid_error.tra.norm() << ", ";
+    out << weighted_centroid_error.rot << "\n";
+    out.close();
   }
 
   void LaserCallback(const sensor_msgs::LaserScan::ConstPtr& msg) {
     util::LaserScan laser(*msg);
     particle_filter.UpdateObservation(laser, &sampled_laser_pub);
     particle_filter.DrawParticles(&particle_pub);
+    const util::Pose max_estimate = particle_filter.MaxWeight();
+    const util::Pose weighted_centroid = particle_filter.WeightedCentroid();
+    const util::Pose max_estimate_error = (max_estimate - ground_truth);
+    const util::Pose weighted_centroid_error =
+        (weighted_centroid - ground_truth);
+    WriteError(max_estimate_error, weighted_centroid_error);
   }
 
   void OdomCallback(const geometry_msgs::Twist::ConstPtr& msg) {
@@ -107,15 +93,15 @@ struct ParticleFilterWrapper {
 int main(int argc, char** argv) {
   ros::init(argc, argv, "particle_filter", ros::init_options::NoSigintHandler);
 
-  if (signal(SIGINT, FatalSignalHandler) == SIG_ERR) {
+  if (signal(SIGINT, util::crash::FatalSignalHandler) == SIG_ERR) {
     std::cerr << "Cannot trap SIGINT" << std::endl;
     exit(-1);
   }
-  if (signal(SIGSEGV, FatalSignalHandler) == SIG_ERR) {
+  if (signal(SIGSEGV, util::crash::FatalSignalHandler) == SIG_ERR) {
     std::cerr << "Cannot trap SIGSEGV" << std::endl;
     exit(-1);
   }
-  if (signal(SIGABRT, FatalSignalHandler) == SIG_ERR) {
+  if (signal(SIGABRT, util::crash::FatalSignalHandler) == SIG_ERR) {
     std::cerr << "Cannot trap SIGABRT" << std::endl;
     exit(-1);
   }

@@ -55,7 +55,7 @@ class ParticleFilter {
   bool initialized_;
   std::random_device rd_;
   std::mt19937 gen_;
-  static constexpr int kNumParticles = 50;
+  static constexpr int kNumParticles = 30;
   using ParticleArray = std::array<Particle, kNumParticles>;
   ParticleArray particles_;
   MotionModel motion_model_;
@@ -78,5 +78,8 @@ class ParticleFilter {
                          ros::Publisher* sampled_scan_pub);
 
   void DrawParticles(ros::Publisher* particle_pub) const;
+
+  util::Pose MaxWeight() const;
+  util::Pose WeightedCentroid() const;
 };
 }  // namespace localization

@@ -31,6 +31,9 @@
 #include <string>
 #include <vector>
 
+namespace util {
+namespace crash {
+
 std::string ExecuteCommand(const char* cmd) {
   FILE* pipe = popen(cmd, "r");
   if (!pipe) return "ERROR";
@@ -108,3 +111,6 @@ void FatalSignalHandler(int signo) {
   PrintStackTrace();
   exit(1);
 }
+
+}  // namespace crash
+}  // namespace util

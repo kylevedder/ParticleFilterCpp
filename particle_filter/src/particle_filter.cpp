@@ -6,6 +6,7 @@
 #include "particle_filter/array_util.h"
 #include "particle_filter/geometry.h"
 #include "particle_filter/math_util.h"
+#include "particle_filter/visualization.h"
 
 #include "visualization_msgs/MarkerArray.h"
 
@@ -92,7 +93,7 @@ float SensorModel::GetProbability(const util::Pose& pose_global_frame,
 
     const float depth_probability =
         GetDepthProbability(range, distance_to_map_wall, range_min, range_max);
-    if (depth_probability > 0.0f) {
+    if (depth_probability > 0.0f || range > range_max / 2.0f) {
       (*filtered_laser_scan).ros_laser_scan_.ranges[i] =
           std::numeric_limits<float>::quiet_NaN();
     }
@@ -167,8 +168,11 @@ float ScanSimilarity(const util::LaserScan& scan1, const util::Pose& pose1,
   NP_FINITE(total_error);
   const float average_error =
       total_error / static_cast<float>(global_points_1.size());
-  std::cout << "Average error: " << average_error << std::endl;
-  return 0.0f;
+  // std::cout << "Average error: " << average_error << std::endl;
+  if (average_error < 0.01f) {
+    return 100.0f;
+  }
+  return 1.0f / average_error;
 }
 
 util::LaserScan ParticleFilter::ReweightParticles(
@@ -181,6 +185,8 @@ util::LaserScan ParticleFilter::ReweightParticles(
     const float similarity =
         ScanSimilarity(laser_scan, p.pose, p.prev_filtered_laser, p.prev_pose);
     p.weight += similarity;
+    // std::cout << "Weight: " << p.weight - similarity << " Sim: " <<
+    // similarity << " Weight + Sim: " << p.weight << std::endl;
 
     p.prev_filtered_laser = filtered_laser_scan;
     p.prev_pose = p.pose;
@@ -233,7 +239,37 @@ void ParticleFilter::UpdateObservation(const util::LaserScan& laser_scan,
   ResampleParticles();
 }
 
+util::Pose ParticleFilter::MaxWeight() const {
+  Particle const* max_particle = &particles_[0];
+  for (Particle const& p : particles_) {
+    if (max_particle->weight < p.weight) {
+      max_particle = &p;
+    }
+  }
+  return max_particle->pose;
+}
+
+util::Pose ParticleFilter::WeightedCentroid() const {
+  float total_weight = 0;
+  for (const Particle& p : particles_) {
+    total_weight += p.weight;
+  }
+
+  util::Pose weighted_centroid({0, 0}, 0);
+  for (const Particle& p : particles_) {
+    const float scale = p.weight / total_weight;
+    weighted_centroid.tra += p.pose.tra * scale;
+    weighted_centroid.rot =
+        math_util::AngleMod(weighted_centroid.rot + p.pose.rot * scale);
+  }
+  return weighted_centroid;
+}
+
 void ParticleFilter::DrawParticles(ros::Publisher* particle_pub) const {
+  if (!initialized_) {
+    ROS_WARN("Particle filter not initialized yet!");
+    return;
+  }
   static visualization_msgs::MarkerArray particle_markers;
   for (visualization_msgs::Marker& marker : particle_markers.markers) {
     marker.action = marker.DELETE;
@@ -244,70 +280,19 @@ void ParticleFilter::DrawParticles(ros::Publisher* particle_pub) const {
   for (const Particle& p : particles_) {
     max_weight = std::max(p.weight, max_weight);
   }
-  for (const Particle& p : particles_) {
-    NP_FINITE(p.pose.tra.x());
-    NP_FINITE(p.pose.tra.y());
-    NP_FINITE(p.pose.rot);
-    NP_FINITE(p.weight);
 
-    {
-      visualization_msgs::Marker marker;
-      marker.header.frame_id = "map";
-      marker.header.stamp = ros::Time();
-      marker.ns = "particles";
-      marker.id = particle_markers.markers.size();
-      marker.type = visualization_msgs::Marker::SPHERE;
-      marker.action = visualization_msgs::Marker::ADD;
-      NP_FINITE(p.pose.tra.x());
-      NP_FINITE(p.pose.tra.y());
-      marker.pose.position.x = p.pose.tra.x();
-      marker.pose.position.y = p.pose.tra.y();
-      marker.pose.position.z = 0;
-      marker.scale.x = 0.05;
-      marker.scale.y = 0.05;
-      marker.scale.z = 0.05;
-      marker.color.a = ((max_weight > 9.0f) ? (p.weight / max_weight) : 1.0f);
-      marker.color.r = 1.0;
-      marker.color.g = 0.0;
-      marker.color.b = 0.0;
-      particle_markers.markers.push_back(marker);
-    }
-    {
-      visualization_msgs::Marker marker;
-      marker.header.frame_id = "map";
-      marker.header.stamp = ros::Time();
-      marker.ns = "particles";
-      marker.id = particle_markers.markers.size();
-      marker.type = visualization_msgs::Marker::ARROW;
-      marker.action = visualization_msgs::Marker::ADD;
-      geometry_msgs::Point start;
-      NP_FINITE(p.pose.tra.x());
-      NP_FINITE(p.pose.tra.y());
-      start.x = p.pose.tra.x();
-      start.y = p.pose.tra.y();
-      NP_FINITE(start.x);
-      NP_FINITE(start.y);
-      geometry_msgs::Point end;
-      const Eigen::Vector2f delta(math_util::Cos(p.pose.rot) * 0.4f,
-                                  math_util::Sin(p.pose.rot) * 0.4f);
-      NP_FINITE(delta.x());
-      NP_FINITE(delta.y());
-      end.x = p.pose.tra.x() + delta.x();
-      end.y = p.pose.tra.y() + delta.y();
-      NP_FINITE(end.x);
-      NP_FINITE(end.y);
-      marker.points.push_back(start);
-      marker.points.push_back(end);
-      marker.scale.x = 0.02;
-      marker.scale.y = 0.1;
-      marker.scale.z = 0.1;
-      marker.color.a = ((max_weight > 9.0f) ? (p.weight / max_weight) : 1.0f);
-      marker.color.r = 0.0;
-      marker.color.g = 1.0;
-      marker.color.b = 0.0;
-      particle_markers.markers.push_back(marker);
-    }
+  for (const Particle& p : particles_) {
+    const float alpha =
+        ((max_weight > 0.0f) ? (p.weight / max_weight) : 0.0f) / 2;
+    visualization::DrawPose(p.pose, "map", "particles", 1, 0, 0, alpha,
+                            &particle_markers);
   }
+
+  const util::Pose estimate = WeightedCentroid();
+
+  visualization::DrawPose(estimate, "map", "estimate", 0, 0, 1, 1,
+                          &particle_markers);
+
   particle_pub->publish(particle_markers);
 }
 }  // namespace localization

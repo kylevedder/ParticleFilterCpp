@@ -28,8 +28,8 @@
 #include "constants.h"
 #include "eigen3/Eigen/Dense"
 #include "eigen3/Eigen/Geometry"
-#include "math_util.h"
-#include "pose.h"
+#include "particle_filter/math_util.h"
+#include "particle_filter/pose.h"
 
 using math_util::AngleMod;
 using math_util::Cos;
