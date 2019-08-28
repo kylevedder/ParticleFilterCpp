@@ -168,11 +168,12 @@ target_link_libraries(particle_filter_lib
 
 add_executable(particle_filter_node src/particle_filter_node.cpp)
 target_link_libraries(particle_filter_node particle_filter_lib ${catkin_LIBRARIES})
-add_dependencies(particle_filter_node particle_filter_lib particle_filter_generate_messages_cpp)
+add_dependencies(particle_filter_node particle_filter_lib)
 
 add_executable(simulator_node src/simulator_node.cpp)
 target_link_libraries(simulator_node util_lib ${catkin_LIBRARIES})
-add_dependencies(simulator_node util_lib particle_filter_generate_messages_cpp)
+add_dependencies(simulator_node util_lib)
+#particle_filter_generate_messages_cpp
 
 #############
 ## Install ##
