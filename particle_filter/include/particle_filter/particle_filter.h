@@ -25,8 +25,6 @@ class MotionModel {
 
 class SensorModel {
  private:
-  std::random_device rd_;
-  std::mt19937 gen_;
   util::Map map_;
 
  public:

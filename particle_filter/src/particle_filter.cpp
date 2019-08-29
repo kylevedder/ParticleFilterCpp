@@ -17,7 +17,7 @@
 
 namespace localization {
 
-MotionModel::MotionModel() : rd_(), gen_(rd_()) {}
+MotionModel::MotionModel() : rd_(), gen_(0) {}
 
 util::Pose MotionModel::ForwardPredict(const util::Pose& pose_global_frame,
                                        const float translation_robot_frame,
@@ -36,8 +36,7 @@ util::Pose MotionModel::ForwardPredict(const util::Pose& pose_global_frame,
                                     rotation);
 }
 
-SensorModel::SensorModel(const util::Map& map)
-    : rd_(), gen_(rd_()), map_(map) {}
+SensorModel::SensorModel(const util::Map& map) : map_(map) {}
 
 float GetDepthProbability(const float& sensor_reading, const float& map_reading,
                           const float& ray_min, const float& ray_max) {
@@ -103,11 +102,11 @@ float SensorModel::GetProbability(const util::Pose& pose_global_frame,
 }
 
 ParticleFilter::ParticleFilter(const util::Map& map)
-    : initialized_(false), rd_(), gen_(rd_()), sensor_model_(map) {}
+    : initialized_(false), rd_(), gen_(0), sensor_model_(map) {}
 
 ParticleFilter::ParticleFilter(const util::Map& map,
                                const util::Pose& start_pose)
-    : initialized_(true), rd_(), gen_(rd_()), sensor_model_(map) {
+    : initialized_(true), rd_(), gen_(0), sensor_model_(map) {
   InitalizePose(start_pose);
 }
 
@@ -183,6 +182,7 @@ util::LaserScan ParticleFilter::ReweightParticles(
     p.weight =
         sensor_model_.GetProbability(p.pose, laser_scan, &filtered_laser_scan);
     const float similarity =
+        0.0f *
         ScanSimilarity(laser_scan, p.pose, p.prev_filtered_laser, p.prev_pose);
     p.weight += similarity;
     // std::cout << "Weight: " << p.weight - similarity << " Sim: " <<

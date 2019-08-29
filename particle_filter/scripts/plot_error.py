@@ -13,7 +13,7 @@ mything_csv_file, standard_csv_file = parse_args()
 
 mything_df = pandas.read_csv(mything_csv_file)
 standard_df = pandas.read_csv(standard_csv_file)
-print(mything_df)
+#print(mything_df)
 plt.subplot(211)
 plt.title("Weighted Average Particle Estimate")
 row_name = "cent_error_norm"
@@ -24,6 +24,7 @@ plt.plot(range(len(standard_df[row_name])), [standard_df[row_name].mean()] * len
 plt.xlabel("Step")
 plt.ylabel("Translational error (meters)")
 plt.legend()
+plt.grid()
 plt.subplot(212)
 plt.title("Max Weighted Particle Estimate")
 row_name = "max_error_norm"
@@ -34,6 +35,7 @@ plt.plot(range(len(standard_df[row_name])), [standard_df[row_name].mean()] * len
 plt.xlabel("Step")
 plt.ylabel("Translational error (meters)")
 plt.legend()
+plt.grid()
 plt.show()
     
     

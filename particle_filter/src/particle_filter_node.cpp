@@ -81,6 +81,11 @@ struct ParticleFilterWrapper {
     const util::Pose weighted_centroid_error =
         (weighted_centroid - ground_truth);
     WriteError(max_estimate_error, weighted_centroid_error);
+    static int iteration_count = 0;
+    ++iteration_count;
+    if (iteration_count >= 500) {
+      exit(0);
+    }
   }
 
   void OdomCallback(const geometry_msgs::Twist::ConstPtr& msg) {

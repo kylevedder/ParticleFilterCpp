@@ -7,15 +7,17 @@ static constexpr float kPi = M_PI;
 static constexpr float kEpsilon = 0.001f;
 
 static constexpr float kLaserReadingNoiseStddev = 0.01f;
-static constexpr float kMoveAlongArcNoiseStddev = 0.025f;
-static constexpr float kMoveRotateNoiseStddev = 0.02f;
+static constexpr float kMoveAlongArcExecutionNoiseStddev = 0.025f;
+static constexpr float kMoveRotateExecutionNoiseStddev = 0.02f;
+static constexpr float kMoveAlongArcReadingNoiseStddev = 0.001f;
+static constexpr float kMoveRotateReadingNoiseStddev = 0.005f;
 
 static constexpr float kPFLaserReadingNoiseStddev =
     kLaserReadingNoiseStddev + 0.02f;
 static constexpr float kPFMoveAlongArcNoiseStddev =
-    kMoveAlongArcNoiseStddev + 0.01f;
+    kMoveAlongArcExecutionNoiseStddev + kMoveAlongArcReadingNoiseStddev + 0.01f;
 static constexpr float kPFMoveRotateNoiseStddev =
-    kMoveRotateNoiseStddev + 0.005f;
+    kMoveRotateExecutionNoiseStddev + kMoveRotateReadingNoiseStddev + 0.005f;
 
 static constexpr float kMinAngle = -kPi / 2;
 static constexpr float kMaxAngle = kPi / 2;

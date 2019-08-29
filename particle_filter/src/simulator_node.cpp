@@ -17,8 +17,8 @@
 #include <random>
 #include <string>
 
-std::random_device rd;
-std::mt19937 gen(rd());
+// std::random_device rd;
+std::mt19937 gen(0);
 
 std_msgs::Header MakeHeader(const std::string& frame_id) {
   static uint32_t seq = 0;
@@ -79,6 +79,136 @@ sensor_msgs::LaserScan MakeScan(const util::Pose& robot_pose,
   return scan;
 }
 
+void PublishTransforms(const util::Pose& current_pose) {
+  static tf::TransformBroadcaster br;
+  tf::Transform transform;
+  transform.setOrigin(
+      tf::Vector3(current_pose.tra.x(), current_pose.tra.y(), 0.0));
+  tf::Quaternion q;
+  q.setRPY(0, 0, current_pose.rot);
+  transform.setRotation(q);
+  br.sendTransform(
+      tf::StampedTransform(transform, ros::Time::now(), "map", "base_link"));
+}
+
+util::Pose AddExecutionOdomNoise(util::Pose move) {
+  std::normal_distribution<> along_arc_dist(0.0f,
+                                            kMoveAlongArcExecutionNoiseStddev);
+  std::normal_distribution<> rotation_dist(0.0f,
+                                           kMoveRotateExecutionNoiseStddev);
+  if (fabs(move.tra.x()) > 0.01f) {
+    move.tra.x() += along_arc_dist(gen);
+  }
+  if (fabs(move.rot) > 0.005f) {
+    move.rot += rotation_dist(gen);
+  }
+  return move;
+}
+
+util::Pose AddReadingOdomNoise(util::Pose move) {
+  std::normal_distribution<> along_arc_dist(0.0f,
+                                            kMoveAlongArcReadingNoiseStddev);
+  std::normal_distribution<> rotation_dist(0.0f, kMoveRotateReadingNoiseStddev);
+  if (fabs(move.tra.x()) > 0.01f) {
+    move.tra.x() += along_arc_dist(gen);
+  }
+  if (fabs(move.rot) > 0.005f) {
+    move.rot += rotation_dist(gen);
+  }
+  return move;
+}
+
+util::Pose CommandSpinCircle(const util::Pose& current_pose) {
+  return {{0.05f, 0}, -0.1f};
+}
+
+util::Pose DriveToPose(const util::Pose& current_pose,
+                       const util::Pose& goal_pose) {
+  const util::Pose delta = goal_pose - current_pose;
+  static float kMinRotationalErrorToHalt = kPi / 4;
+  static float kRotP = 0.5f;
+  static float kMaxRot = 0.1f;
+  static float kTraP = 0.5f;
+  static float kMaxTra = 0.1f;
+  static float kTraHaltThreshold = 0.05f;
+  static float kTraRotThreshold = 0.05f;
+
+  // At goal translationally and rotationally.
+  if (delta.tra.squaredNorm() < Sq(kTraHaltThreshold) &&
+      fabs(delta.rot) < kTraRotThreshold) {
+    ROS_INFO("Drive complete!");
+    return {{0, 0}, 0};
+  }
+
+  // At goal translationally but not rotationally.
+  if (delta.tra.squaredNorm() < Sq(kTraHaltThreshold)) {
+    ROS_INFO("Rotate to final!");
+    const float rot_cmd =
+        math_util::Sign(delta.rot) * std::min(kMaxRot, fabs(delta.rot) * kRotP);
+    return {{0, 0}, rot_cmd};
+  }
+
+  const Eigen::Vector2f current_to_goal_norm = delta.tra.normalized();
+  const float desired_angle = math_util::AngleMod(
+      atan2(current_to_goal_norm.y(), current_to_goal_norm.x()));
+  const float angle_to_goal =
+      math_util::AngleMod(desired_angle - current_pose.rot);
+  ROS_INFO("Desired angle %f  Current Angle %f, Angle to goal: %f",
+           desired_angle, current_pose.rot, angle_to_goal);
+
+  const float rot_cmd = math_util::Sign(angle_to_goal) *
+                        std::min(kMaxRot, fabs(angle_to_goal) * kRotP);
+
+  // If angle is too far away to correct while moving.
+  if (fabs(angle_to_goal) > kMinRotationalErrorToHalt) {
+    ROS_INFO("Correct angle to drive!");
+    return {{0, 0}, rot_cmd};
+  }
+
+  const Eigen::Vector2f tra_cmd = [&delta]() -> Eigen::Vector2f {
+    const Eigen::Vector2f uncapped_tra_cmd =
+        Eigen::Rotation2Df(-delta.rot) * (delta.tra * kTraP);
+    if (uncapped_tra_cmd.squaredNorm() > Sq(kMaxTra)) {
+      return {kMaxTra, 0};
+    }
+    return {fabs(uncapped_tra_cmd.x()), 0};
+  }();
+
+  ROS_INFO("Drive to goal!");
+  return {tra_cmd, rot_cmd};
+}
+
+util::Pose CommandEndToEnd(const util::Pose& current_pose) {
+  enum State { DRIVE_POINT1, DRIVE_POINT2 };
+  static State state = DRIVE_POINT1;
+  static const util::Pose point1({8, 0}, 0);
+  static const util::Pose point2({0, 0}, 0);
+
+  while (true) {
+    switch (state) {
+      case DRIVE_POINT1: {
+        ROS_INFO("DRIVE_POINT1");
+        const util::Pose cmd = DriveToPose(current_pose, point1);
+        if (cmd != util::Pose({0, 0}, 0)) {
+          return cmd;
+        }
+        state = State::DRIVE_POINT2;
+        break;
+      }
+      case DRIVE_POINT2: {
+        ROS_INFO("DRIVE_POINT2");
+        const util::Pose cmd = DriveToPose(current_pose, point2);
+        if (cmd != util::Pose({0, 0}, 0)) {
+          return cmd;
+        }
+        state = State::DRIVE_POINT1;
+        break;
+      }
+    }
+  };
+  return {{0, 0}, 0};
+}
+
 int main(int argc, char** argv) {
   ros::init(argc, argv, "simulator");
 
@@ -94,41 +224,19 @@ int main(int argc, char** argv) {
   const util::Map map("src/particle_filter/maps/rectangle_small_bump.map");
   util::Pose current_pose({8, 0}, 0);
 
-  int iteration = 0;
   while (ros::ok()) {
+    const util::Pose desired_move = CommandEndToEnd(current_pose);
+    const util::Pose executed_move = AddExecutionOdomNoise(desired_move);
+    const util::Pose reported_move = AddReadingOdomNoise(executed_move);
+    current_pose = geometry::FollowTrajectory(
+        current_pose, executed_move.tra.x(), executed_move.rot);
+
+    PublishTransforms(current_pose);
+    scan_pub.publish(MakeScan(current_pose, map, kLaserReadingNoiseStddev));
+    odom_pub.publish(reported_move.ToTwist());
     initial_pose_pub.publish(current_pose.ToTwist());
-    if (iteration >= 200) {
-      iteration = 0;
-    }
-
-    util::Pose move({0.05f, 0}, -0.1f);
-    current_pose =
-        geometry::FollowTrajectory(current_pose, move.tra.x(), move.rot);
-    ROS_INFO("Current Pose: (%f, %f) %f", current_pose.tra.x(),
-             current_pose.tra.y(), current_pose.rot);
-
-    static tf::TransformBroadcaster br;
-    tf::Transform transform;
-    transform.setOrigin(
-        tf::Vector3(current_pose.tra.x(), current_pose.tra.y(), 0.0));
-    tf::Quaternion q;
-    q.setRPY(0, 0, current_pose.rot);
-    transform.setRotation(q);
-    br.sendTransform(
-        tf::StampedTransform(transform, ros::Time::now(), "map", "base_link"));
-
-    const sensor_msgs::LaserScan scan =
-        MakeScan(current_pose, map, kLaserReadingNoiseStddev);
-    scan_pub.publish(scan);
-    std::normal_distribution<> along_arc_dist(0.0f, kMoveAlongArcNoiseStddev);
-    std::normal_distribution<> rotation_dist(0.0f, kMoveRotateNoiseStddev);
-    move.tra.x() += along_arc_dist(gen);
-    move.rot += rotation_dist(gen);
-
-    odom_pub.publish(move.ToTwist());
     ros::spinOnce();
     loop_rate.sleep();
-    ++iteration;
   }
 
   return 0;
