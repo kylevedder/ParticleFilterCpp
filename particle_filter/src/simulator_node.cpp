@@ -92,29 +92,22 @@ void PublishTransforms(const util::Pose& current_pose) {
 }
 
 util::Pose AddExecutionOdomNoise(util::Pose move) {
-  std::normal_distribution<> along_arc_dist(0.0f,
-                                            kMoveAlongArcExecutionNoiseStddev);
-  std::normal_distribution<> rotation_dist(0.0f,
-                                           kMoveRotateExecutionNoiseStddev);
-  if (fabs(move.tra.x()) > 0.01f) {
-    move.tra.x() += along_arc_dist(gen);
-  }
-  if (fabs(move.rot) > 0.005f) {
-    move.rot += rotation_dist(gen);
-  }
+  std::normal_distribution<> along_arc_dist(
+      0.0f, kMoveAlongArcExecutionNoiseStddev * move.tra.norm());
+  std::normal_distribution<> rotation_dist(
+      0.0f, kMoveRotateExecutionNoiseStddev * move.rot);
+  move.tra.x() += along_arc_dist(gen);
+  move.rot += rotation_dist(gen);
   return move;
 }
 
 util::Pose AddReadingOdomNoise(util::Pose move) {
-  std::normal_distribution<> along_arc_dist(0.0f,
-                                            kMoveAlongArcReadingNoiseStddev);
-  std::normal_distribution<> rotation_dist(0.0f, kMoveRotateReadingNoiseStddev);
-  if (fabs(move.tra.x()) > 0.01f) {
-    move.tra.x() += along_arc_dist(gen);
-  }
-  if (fabs(move.rot) > 0.005f) {
-    move.rot += rotation_dist(gen);
-  }
+  std::normal_distribution<> along_arc_dist(
+      0.0f, kMoveAlongArcReadingNoiseStddev * move.tra.norm());
+  std::normal_distribution<> rotation_dist(
+      0.0f, kMoveRotateReadingNoiseStddev * move.rot);
+  move.tra.x() += along_arc_dist(gen);
+  move.rot += rotation_dist(gen);
   return move;
 }
 

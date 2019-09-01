@@ -83,7 +83,7 @@ struct ParticleFilterWrapper {
     WriteError(max_estimate_error, weighted_centroid_error);
     static int iteration_count = 0;
     ++iteration_count;
-    if (iteration_count >= 500) {
+    if (iteration_count >= 200) {
       exit(0);
     }
   }
