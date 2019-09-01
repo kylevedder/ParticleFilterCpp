@@ -234,7 +234,9 @@ void ParticleFilter::UpdateObservation(const util::LaserScan& laser_scan,
 
   const auto filtered_laser_scan = ReweightParticles(laser_scan);
 
-  sampled_scan_pub->publish(filtered_laser_scan.ros_laser_scan_);
+  if (sampled_scan_pub != nullptr) {
+    sampled_scan_pub->publish(filtered_laser_scan.ros_laser_scan_);
+  }
 
   ResampleParticles();
 }

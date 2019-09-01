@@ -5,7 +5,8 @@
 #include "eigen3/Eigen/Core"
 #include "eigen3/Eigen/Geometry"
 
-#include "pose.h"
+#include "particle_filter/constants.h"
+#include "particle_filter/pose.h"
 
 #include <vector>
 

@@ -1,7 +1,8 @@
 #pragma once
 
 #include <visualization_msgs/MarkerArray.h>
-#include "pose.h"
+
+#include "particle_filter/pose.h"
 
 namespace visualization {
 void DrawPose(const util::Pose& pose, const std::string& frame_id,

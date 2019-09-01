@@ -14,6 +14,7 @@ find_package(catkin REQUIRED COMPONENTS
   tf
   roscpp
   rospy
+  rosbag
   std_msgs
 )
 
@@ -168,6 +169,10 @@ target_link_libraries(particle_filter_lib
 
 add_executable(particle_filter_node src/particle_filter_node.cpp)
 target_link_libraries(particle_filter_node particle_filter_lib ${catkin_LIBRARIES})
+add_dependencies(particle_filter_node particle_filter_lib)
+
+add_executable(particle_filter_bag_reader src/particle_filter_bag_reader.cpp)
+target_link_libraries(particle_filter_bag_reader particle_filter_lib ${catkin_LIBRARIES})
 add_dependencies(particle_filter_node particle_filter_lib)
 
 add_executable(simulator_node src/simulator_node.cpp)

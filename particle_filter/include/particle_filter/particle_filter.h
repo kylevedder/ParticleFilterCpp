@@ -1,11 +1,11 @@
 #pragma once
-
-#include "laser_scan.h"
-#include "map.h"
-#include "pose.h"
-
+#include <ros/ros.h>
 #include <array>
 #include <random>
+
+#include "particle_filter/laser_scan.h"
+#include "particle_filter/map.h"
+#include "particle_filter/pose.h"
 
 namespace localization {
 

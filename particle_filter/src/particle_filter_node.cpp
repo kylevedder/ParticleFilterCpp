@@ -1,10 +1,3 @@
-#include "geometry_msgs/Twist.h"
-#include "ros/ros.h"
-#include "sensor_msgs/LaserScan.h"
-
-#include "eigen3/Eigen/Core"
-#include "eigen3/Eigen/Geometry"
-
 #include <signal.h>
 #include <cmath>
 #include "particle_filter/crash_handling.h"
@@ -13,7 +6,12 @@
 #include "particle_filter/particle_filter.h"
 #include "particle_filter/visualization.h"
 
+#include <geometry_msgs/Twist.h>
+#include <ros/ros.h>
+#include <sensor_msgs/LaserScan.h>
 #include <visualization_msgs/MarkerArray.h>
+#include <eigen3/Eigen/Core>
+#include <eigen3/Eigen/Geometry>
 #include <fstream>
 
 void DrawGroundTruth(const util::Pose& ground_truth,

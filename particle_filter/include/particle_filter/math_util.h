@@ -24,6 +24,8 @@
 #include <array>
 #include <cmath>
 
+#include "particle_filter/constants.h"
+
 #define M_2PI (2.0 * M_PI)
 
 namespace math_util {
