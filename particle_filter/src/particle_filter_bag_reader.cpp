@@ -7,6 +7,7 @@
 #include "particle_filter/constants.h"
 #include "particle_filter/particle_filter.h"
 #include "particle_filter/pose.h"
+#include "particle_filter/util.h"
 
 struct ParticleFilterWrapper {
   localization::ParticleFilter particle_filter;
@@ -61,39 +62,40 @@ struct ParticleFilterWrapper {
   }
 };
 
-std::string GetBagName(int argc, char** argv) {
-  if (argc != 2) {
-    std::cerr << "Usage: " << argv[0] << " [rosbag.bag]" << std::endl;
-    exit(-1);
-  }
-  return {argv[1]};
-}
-
 int main(int argc, char** argv) {
-  ParticleFilterWrapper wrapper(util::Map(
-      "/home/k/code/catkin_ws/src/particle_filter/maps/rectangle.map"));
+  util::PrintCurrentWorkingDirectory();
+  config_reader::ConfigReader reader(
+      {"src/particle_filter/config/pf_config.lua",
+       "src/particle_filter/config/sim_config.lua"});
+  ParticleFilterWrapper wrapper(
+      util::Map("/home/k/code/catkin_ws/src/particle_filter/maps/loop.map"));
 
-  const std::string bag_name = GetBagName(argc, argv);
+  const std::string bag_name =
+      "/home/k/code/catkin_ws/rosbags/down_and_back.bag";
   rosbag::Bag bag(bag_name, rosbag::bagmode::Read);
 
-  for (rosbag::MessageInstance const& m : rosbag::View(bag)) {
-    if (m.getTopic() == "true_pose") {
+  rosbag::View view(bag);
+  ROS_INFO("Opened bag; found %d messages", view.size());
+  for (rosbag::MessageInstance const& m : view) {
+    if (m.getTopic() == "/true_pose") {
       geometry_msgs::Twist::ConstPtr msg =
           m.instantiate<geometry_msgs::Twist>();
       NP_CHECK(msg != nullptr);
       wrapper.StartCallback(msg);
-    } else if (m.getTopic() == "odom") {
+    } else if (m.getTopic() == "/odom") {
       geometry_msgs::Twist::ConstPtr msg =
           m.instantiate<geometry_msgs::Twist>();
       NP_CHECK(msg != nullptr);
       wrapper.OdomCallback(msg);
-    } else if (m.getTopic() == "laser") {
+    } else if (m.getTopic() == "/laser") {
       sensor_msgs::LaserScan::ConstPtr msg =
           m.instantiate<sensor_msgs::LaserScan>();
       NP_CHECK(msg != nullptr);
       wrapper.LaserCallback(msg);
     }
   }
+
+  ROS_INFO("All messages read");
 
   return 0;
 }

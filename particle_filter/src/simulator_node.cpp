@@ -10,8 +10,11 @@
 #include "particle_filter/map.h"
 #include "particle_filter/math_util.h"
 #include "particle_filter/pose.h"
+#include "particle_filter/util.h"
+#include "particle_filter/visualization.h"
 
 #include <tf/transform_broadcaster.h>
+#include <visualization_msgs/MarkerArray.h>
 
 #include <cmath>
 #include <random>
@@ -93,9 +96,9 @@ void PublishTransforms(const util::Pose& current_pose) {
 
 util::Pose AddExecutionOdomNoise(util::Pose move) {
   std::normal_distribution<> along_arc_dist(
-      0.0f, kMoveAlongArcExecutionNoiseStddev * move.tra.norm());
+      0.0f, sim::kArcExecStdDev * move.tra.norm());
   std::normal_distribution<> rotation_dist(
-      0.0f, kMoveRotateExecutionNoiseStddev * move.rot);
+      0.0f, sim::kRotateExecStdDev * move.rot + 0.005);
   move.tra.x() += along_arc_dist(gen);
   move.rot += rotation_dist(gen);
   return move;
@@ -103,9 +106,9 @@ util::Pose AddExecutionOdomNoise(util::Pose move) {
 
 util::Pose AddReadingOdomNoise(util::Pose move) {
   std::normal_distribution<> along_arc_dist(
-      0.0f, kMoveAlongArcReadingNoiseStddev * move.tra.norm());
-  std::normal_distribution<> rotation_dist(
-      0.0f, kMoveRotateReadingNoiseStddev * move.rot);
+      0.0f, sim::kArcReadStdDev * move.tra.norm());
+  std::normal_distribution<> rotation_dist(0.0f,
+                                           sim::kRotateReadStdDev * move.rot);
   move.tra.x() += along_arc_dist(gen);
   move.rot += rotation_dist(gen);
   return move;
@@ -117,25 +120,30 @@ util::Pose CommandSpinCircle(const util::Pose& current_pose) {
 
 util::Pose DriveToPose(const util::Pose& current_pose,
                        const util::Pose& goal_pose) {
+  static constexpr bool kDebug = false;
   const util::Pose delta = goal_pose - current_pose;
   static float kMinRotationalErrorToHalt = kPi / 4;
   static float kRotP = 0.5f;
   static float kMaxRot = 0.1f;
   static float kTraP = 0.5f;
   static float kMaxTra = 0.1f;
-  static float kTraHaltThreshold = 0.05f;
-  static float kTraRotThreshold = 0.05f;
+  static float kTraHaltThreshold = 0.25f;
+  static float kTraRotThreshold = 0.1f;
 
   // At goal translationally and rotationally.
   if (delta.tra.squaredNorm() < Sq(kTraHaltThreshold) &&
       fabs(delta.rot) < kTraRotThreshold) {
-    ROS_INFO("Drive complete!");
+    if (kDebug) {
+      ROS_INFO("Drive complete!");
+    }
     return {{0, 0}, 0};
   }
 
   // At goal translationally but not rotationally.
   if (delta.tra.squaredNorm() < Sq(kTraHaltThreshold)) {
-    ROS_INFO("Rotate to final!");
+    if (kDebug) {
+      ROS_INFO("Rotate to final!");
+    }
     const float rot_cmd =
         math_util::Sign(delta.rot) * std::min(kMaxRot, fabs(delta.rot) * kRotP);
     return {{0, 0}, rot_cmd};
@@ -144,17 +152,23 @@ util::Pose DriveToPose(const util::Pose& current_pose,
   const Eigen::Vector2f current_to_goal_norm = delta.tra.normalized();
   const float desired_angle = math_util::AngleMod(
       atan2(current_to_goal_norm.y(), current_to_goal_norm.x()));
-  const float angle_to_goal =
-      math_util::AngleMod(desired_angle - current_pose.rot);
-  ROS_INFO("Desired angle %f  Current Angle %f, Angle to goal: %f",
-           desired_angle, current_pose.rot, angle_to_goal);
+  const float angle_to_goal = std::min(
+      math_util::AngleMod(desired_angle - current_pose.rot),
+      math_util::AngleMod(math_util::AngleMod(desired_angle + kPi) -
+                          math_util::AngleMod(current_pose.rot + kPi)));
+  if (kDebug) {
+    ROS_INFO("Desired angle %f  Current Angle %f, Angle to goal: %f",
+             desired_angle, current_pose.rot, angle_to_goal);
+  }
 
   const float rot_cmd = math_util::Sign(angle_to_goal) *
                         std::min(kMaxRot, fabs(angle_to_goal) * kRotP);
 
   // If angle is too far away to correct while moving.
   if (fabs(angle_to_goal) > kMinRotationalErrorToHalt) {
-    ROS_INFO("Correct angle to drive!");
+    if (kDebug) {
+      ROS_INFO("Correct angle to drive!");
+    }
     return {{0, 0}, rot_cmd};
   }
 
@@ -166,43 +180,31 @@ util::Pose DriveToPose(const util::Pose& current_pose,
     }
     return {fabs(uncapped_tra_cmd.x()), 0};
   }();
-
-  ROS_INFO("Drive to goal!");
+  if (kDebug) {
+    ROS_INFO("Drive to goal!");
+  }
   return {tra_cmd, rot_cmd};
 }
 
-util::Pose CommandEndToEnd(const util::Pose& current_pose) {
-  enum State { DRIVE_POINT1, DRIVE_POINT2 };
-  static State state = DRIVE_POINT1;
-  static const util::Pose point1({8, 0}, 0);
-  static const util::Pose point2({0, 0}, 0);
-
-  while (true) {
-    switch (state) {
-      case DRIVE_POINT1: {
-        ROS_INFO("DRIVE_POINT1");
-        const util::Pose cmd = DriveToPose(current_pose, point1);
-        if (cmd != util::Pose({0, 0}, 0)) {
-          return cmd;
-        }
-        state = State::DRIVE_POINT2;
-        break;
-      }
-      case DRIVE_POINT2: {
-        ROS_INFO("DRIVE_POINT2");
-        const util::Pose cmd = DriveToPose(current_pose, point2);
-        if (cmd != util::Pose({0, 0}, 0)) {
-          return cmd;
-        }
-        state = State::DRIVE_POINT1;
-        break;
-      }
-    }
-  };
-  return {{0, 0}, 0};
+util::Pose CommandPointsLoop(const util::Pose& current_pose,
+                             const std::vector<util::Pose>& waypoints) {
+  NP_CHECK(!waypoints.empty());
+  static size_t current_waypoint_idx = 0;
+  current_waypoint_idx = current_waypoint_idx % waypoints.size();
+  const util::Pose& current_waypoint = waypoints.at(current_waypoint_idx);
+  const util::Pose cmd = DriveToPose(current_pose, current_waypoint);
+  if (cmd != util::Pose({0, 0}, 0)) {
+    return cmd;
+  }
+  current_waypoint_idx = (current_waypoint_idx + 1) % waypoints.size();
+  return DriveToPose(current_pose, waypoints.at(current_waypoint_idx));
 }
 
 int main(int argc, char** argv) {
+  util::PrintCurrentWorkingDirectory();
+  config_reader::ConfigReader reader(
+      {"src/particle_filter/config/pf_config.lua",
+       "src/particle_filter/config/sim_config.lua"});
   ros::init(argc, argv, "simulator");
 
   ros::NodeHandle n;
@@ -211,23 +213,36 @@ int main(int argc, char** argv) {
       n.advertise<geometry_msgs::Twist>("true_pose", 1);
   ros::Publisher scan_pub = n.advertise<sensor_msgs::LaserScan>("laser", 10);
   ros::Publisher odom_pub = n.advertise<geometry_msgs::Twist>("odom", 10);
+  ros::Publisher map_pub = n.advertise<visualization_msgs::Marker>("map", 10);
+  ros::Publisher initial_pose_vis_pub =
+      n.advertise<visualization_msgs::MarkerArray>("true_pose_vis", 1);
 
   ros::Rate loop_rate(5);
 
-  const util::Map map("src/particle_filter/maps/rectangle_small_bump.map");
-  util::Pose current_pose({8, 0}, 0);
+  const util::Map map("src/particle_filter/maps/loop.map");
+  const std::vector<util::Pose> waypoints = {{{-3.5, 3.5}, 0},
+                                             {{3.5, 3.5}, -kPi / 2},
+                                             {{3.5, -3.5}, kPi},
+                                             {{-3.5, -3.5}, kPi / 2}};
+
+  util::Pose current_pose = waypoints.front();
 
   while (ros::ok()) {
-    const util::Pose desired_move = CommandEndToEnd(current_pose);
+    const util::Pose desired_move = CommandPointsLoop(current_pose, waypoints);
     const util::Pose executed_move = AddExecutionOdomNoise(desired_move);
     const util::Pose reported_move = AddReadingOdomNoise(executed_move);
     current_pose = geometry::FollowTrajectory(
         current_pose, executed_move.tra.x(), executed_move.rot);
 
     PublishTransforms(current_pose);
-    scan_pub.publish(MakeScan(current_pose, map, kLaserReadingNoiseStddev));
+    scan_pub.publish(MakeScan(current_pose, map, sim::kLaserStdDev));
     odom_pub.publish(reported_move.ToTwist());
     initial_pose_pub.publish(current_pose.ToTwist());
+    map_pub.publish(map.ToMarker());
+    visualization_msgs::MarkerArray arr;
+    visualization::DrawPose(current_pose, "map", "true_pose_vis", 1, 1, 1, 1,
+                            &arr);
+    initial_pose_vis_pub.publish(arr);
     ros::spinOnce();
     loop_rate.sleep();
   }

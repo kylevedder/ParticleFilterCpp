@@ -53,7 +53,7 @@ class ParticleFilter {
   bool initialized_;
   std::random_device rd_;
   std::mt19937 gen_;
-  static constexpr int kNumParticles = 30;
+  static constexpr int kNumParticles = 50;
   using ParticleArray = std::array<Particle, kNumParticles>;
   ParticleArray particles_;
   MotionModel motion_model_;
@@ -74,6 +74,9 @@ class ParticleFilter {
   void UpdateOdom(const float& translation, const float& rotation);
   void UpdateObservation(const util::LaserScan& laser_scan,
                          ros::Publisher* sampled_scan_pub);
+
+  float ScoreObservation(const util::Pose& pose,
+                         const util::LaserScan& laser_scan) const;
 
   void DrawParticles(ros::Publisher* particle_pub) const;
 

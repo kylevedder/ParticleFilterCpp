@@ -5,6 +5,7 @@
 
 #include "particle_filter/geometry.h"
 
+#include <visualization_msgs/Marker.h>
 #include <string>
 #include <vector>
 
@@ -24,31 +25,9 @@ struct Map {
   explicit Map(const std::string& filepath);
 
   float MinDistanceAlongRay(const Eigen::Vector2f& ray_start,
-                            const Eigen::Vector2f& ray_end) const {
-    NP_FINITE(ray_start.x());
-    NP_FINITE(ray_start.y());
-    NP_FINITE(ray_end.x());
-    NP_FINITE(ray_end.y());
-    NP_CHECK(ray_start != ray_end);
-    float sq_distance = (ray_end - ray_start).squaredNorm();
-    NP_FINITE(sq_distance);
-    for (const Wall& w : walls) {
-      const auto res =
-          geometry::CheckLineLineIntersection(w.p1, w.p2, ray_start, ray_end);
-      if (!res.first) {
-        continue;
-      }
-      const float candidate_sq_distance =
-          (res.second - ray_start).squaredNorm();
-      if (candidate_sq_distance < sq_distance) {
-        sq_distance = candidate_sq_distance;
-      }
+                            const Eigen::Vector2f& ray_end) const;
 
-      NP_FINITE(sq_distance);
-    }
-
-    return sqrt(sq_distance);
-  }
+  visualization_msgs::Marker ToMarker() const;
 };
 
 }  // namespace util

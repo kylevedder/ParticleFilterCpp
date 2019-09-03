@@ -2,22 +2,27 @@
 
 #include <iostream>
 
+#include "config_reader/config_reader.h"
+
 static constexpr bool kProduction = false;
 static constexpr float kPi = M_PI;
 static constexpr float kEpsilon = 0.001f;
 
-static constexpr float kLaserReadingNoiseStddev = 0.01f;
-static constexpr float kMoveAlongArcExecutionNoiseStddev = 0.025f;
-static constexpr float kMoveRotateExecutionNoiseStddev = 0.02f;
-static constexpr float kMoveAlongArcReadingNoiseStddev = 0.001f;
-static constexpr float kMoveRotateReadingNoiseStddev = 0.005f;
+namespace sim {
+CONFIG_FLOAT(kLaserStdDev, "sim.kLaserStdDev");
+CONFIG_FLOAT(kArcExecStdDev, "sim.kArcExecStdDev");
+CONFIG_FLOAT(kArcReadStdDev, "sim.kArcReadStdDev");
+CONFIG_FLOAT(kRotateExecStdDev, "sim.kRotateExecStdDev");
+CONFIG_FLOAT(kRotateReadStdDev, "sim.kRotateReadStdDev");
 
-static constexpr float kPFLaserReadingNoiseStddev =
-    kLaserReadingNoiseStddev + 0.02f;
-static constexpr float kPFMoveAlongArcNoiseStddev =
-    kMoveAlongArcExecutionNoiseStddev + kMoveAlongArcReadingNoiseStddev + 0.01f;
-static constexpr float kPFMoveRotateNoiseStddev =
-    kMoveRotateExecutionNoiseStddev + kMoveRotateReadingNoiseStddev + 0.005f;
+}  // namespace sim
+
+namespace pf {
+CONFIG_FLOAT(kLaserStdDev, "pf.kLaserStdDev");
+CONFIG_FLOAT(kArcStdDev, "pf.kArcStdDev");
+CONFIG_FLOAT(kRotateStdDev, "pf.kRotateStdDev");
+CONFIG_FLOAT(kTemporalConsistencyWeight, "pf.kTemporalConsistencyWeight");
+}  // namespace pf
 
 static constexpr float kMinAngle = -kPi / 2;
 static constexpr float kMaxAngle = kPi / 2;

@@ -122,6 +122,7 @@ catkin_package(
 ## Your package locations should be listed before other locations
 include_directories(
   include
+  ../ConfigReader/include
   ${catkin_INCLUDE_DIRS}
 )
 
@@ -168,15 +169,15 @@ target_link_libraries(particle_filter_lib
 )
 
 add_executable(particle_filter_node src/particle_filter_node.cpp)
-target_link_libraries(particle_filter_node particle_filter_lib ${catkin_LIBRARIES})
+target_link_libraries(particle_filter_node particle_filter_lib lua5.1 ${catkin_LIBRARIES})
 add_dependencies(particle_filter_node particle_filter_lib)
 
 add_executable(particle_filter_bag_reader src/particle_filter_bag_reader.cpp)
-target_link_libraries(particle_filter_bag_reader particle_filter_lib ${catkin_LIBRARIES})
+target_link_libraries(particle_filter_bag_reader particle_filter_lib lua5.1 ${catkin_LIBRARIES})
 add_dependencies(particle_filter_node particle_filter_lib)
 
 add_executable(simulator_node src/simulator_node.cpp)
-target_link_libraries(simulator_node util_lib ${catkin_LIBRARIES})
+target_link_libraries(simulator_node util_lib lua5.1 ${catkin_LIBRARIES})
 add_dependencies(simulator_node util_lib)
 #particle_filter_generate_messages_cpp
 

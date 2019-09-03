@@ -24,10 +24,10 @@ util::Pose MotionModel::ForwardPredict(const util::Pose& pose_global_frame,
                                        const float rotation_robot_frame) {
   NP_CHECK(std::isfinite(translation_robot_frame));
   NP_CHECK(std::isfinite(rotation_robot_frame));
-  std::normal_distribution<> distance_along_arc_dist(
-      translation_robot_frame, kPFMoveAlongArcNoiseStddev);
+  std::normal_distribution<> distance_along_arc_dist(translation_robot_frame,
+                                                     pf::kArcStdDev);
   std::normal_distribution<> rotation_dist(rotation_robot_frame,
-                                           kPFMoveRotateNoiseStddev);
+                                           pf::kRotateStdDev);
 
   const float distance_along_arc = distance_along_arc_dist(gen_);
   const float rotation = rotation_dist(gen_);
@@ -44,7 +44,7 @@ float GetDepthProbability(const float& sensor_reading, const float& map_reading,
       math_util::ProbabilityDensityExp(sensor_reading, 0.01f) * 0.0f;
   const float sensor_reading_noise =
       math_util::ProbabilityDensityGuassian(sensor_reading, map_reading,
-                                            kPFLaserReadingNoiseStddev) *
+                                            pf::kLaserStdDev) *
       1.0f;
   const float sensor_random_reading =
       math_util::ProbabilityDensityUniform(sensor_reading, ray_min, ray_max) *
@@ -75,7 +75,7 @@ float SensorModel::GetProbability(const util::Pose& pose_global_frame,
     if (!std::isfinite(range)) {
       range = range_max;
     }
-    range = math_util::Clamp(range_min, range, range_max);
+    range = math_util::Clamp(range, range_min, range_max);
 
     const Eigen::Vector2f endpoint =
         laser_scan.GetRayEndpoint(i, pose_global_frame);
@@ -174,15 +174,20 @@ float ScanSimilarity(const util::LaserScan& scan1, const util::Pose& pose1,
   return 1.0f / average_error;
 }
 
+float ParticleFilter::ScoreObservation(
+    const util::Pose& pose, const util::LaserScan& laser_scan) const {
+  util::LaserScan filtered_laser_scan = laser_scan;
+  return sensor_model_.GetProbability(pose, laser_scan, &filtered_laser_scan);
+}
+
 util::LaserScan ParticleFilter::ReweightParticles(
     const util::LaserScan& laser_scan) {
-  util::LaserScan filtered_laser_scan = laser_scan;
   for (Particle& p : particles_) {
-    filtered_laser_scan = laser_scan;
+    util::LaserScan filtered_laser_scan = laser_scan;
     p.weight =
         sensor_model_.GetProbability(p.pose, laser_scan, &filtered_laser_scan);
     const float similarity =
-        0.0f *
+        pf::kTemporalConsistencyWeight *
         ScanSimilarity(laser_scan, p.pose, p.prev_filtered_laser, p.prev_pose);
     p.weight += similarity;
     // std::cout << "Weight: " << p.weight - similarity << " Sim: " <<
@@ -195,6 +200,10 @@ util::LaserScan ParticleFilter::ReweightParticles(
     NP_FINITE(p.pose.tra.y());
     NP_FINITE(p.pose.rot);
   }
+
+  util::LaserScan filtered_laser_scan = laser_scan;
+  const util::Pose centroid = WeightedCentroid();
+  sensor_model_.GetProbability(centroid, laser_scan, &filtered_laser_scan);
   return filtered_laser_scan;
 }
 
@@ -258,12 +267,20 @@ util::Pose ParticleFilter::WeightedCentroid() const {
   }
 
   util::Pose weighted_centroid({0, 0}, 0);
+  if (total_weight == 0.0f) {
+    return weighted_centroid;
+  }
+
+  float sum_of_sins = 0.0f;
+  float sum_of_coss = 0.0f;
   for (const Particle& p : particles_) {
     const float scale = p.weight / total_weight;
-    weighted_centroid.tra += p.pose.tra * scale;
-    weighted_centroid.rot =
-        math_util::AngleMod(weighted_centroid.rot + p.pose.rot * scale);
+    weighted_centroid.tra += (p.pose.tra * scale);
+    sum_of_sins += math_util::Sin(p.pose.rot) * scale;
+    sum_of_coss += math_util::Cos(p.pose.rot) * scale;
   }
+
+  weighted_centroid.rot = math_util::AngleMod(atan2(sum_of_sins, sum_of_coss));
   return weighted_centroid;
 }
 

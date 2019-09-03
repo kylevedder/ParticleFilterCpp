@@ -4,6 +4,7 @@
 #include "particle_filter/geometry.h"
 #include "particle_filter/math_util.h"
 #include "particle_filter/particle_filter.h"
+#include "particle_filter/util.h"
 #include "particle_filter/visualization.h"
 
 #include <geometry_msgs/Twist.h>
@@ -79,10 +80,15 @@ struct ParticleFilterWrapper {
     const util::Pose weighted_centroid_error =
         (weighted_centroid - ground_truth);
     WriteError(max_estimate_error, weighted_centroid_error);
-    static int iteration_count = 0;
-    ++iteration_count;
-    if (iteration_count >= 200) {
-      exit(0);
+
+    const float ground_truth_score =
+        particle_filter.ScoreObservation(ground_truth, laser);
+    const float weighted_centroid_score =
+        particle_filter.ScoreObservation(weighted_centroid, laser);
+    ROS_INFO("Ground truths score: %f Weighted centroid score: %f",
+             ground_truth_score, weighted_centroid_score);
+    if (ground_truth_score < weighted_centroid_score) {
+      ROS_INFO("Weighted centroid too high!");
     }
   }
 
@@ -94,6 +100,10 @@ struct ParticleFilterWrapper {
 };
 
 int main(int argc, char** argv) {
+  util::PrintCurrentWorkingDirectory();
+  config_reader::ConfigReader reader(
+      {"src/particle_filter/config/pf_config.lua",
+       "src/particle_filter/config/sim_config.lua"});
   ros::init(argc, argv, "particle_filter", ros::init_options::NoSigintHandler);
 
   if (signal(SIGINT, util::crash::FatalSignalHandler) == SIG_ERR) {
