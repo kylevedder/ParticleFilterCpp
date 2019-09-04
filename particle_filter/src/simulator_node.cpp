@@ -32,29 +32,6 @@ std_msgs::Header MakeHeader(const std::string& frame_id) {
   return header;
 }
 
-Eigen::Vector2f GetRayReturn(const util::Pose& ray, const util::Map& map) {
-  Eigen::Vector2f delta =
-      Eigen::Rotation2Df(ray.rot) * Eigen::Vector2f(kMaxReading - kEpsilon, 0);
-  for (const util::Wall& w : map.walls) {
-    const Eigen::Vector2f& ray_start = ray.tra;
-    const Eigen::Vector2f& ray_end = ray.tra + delta;
-    const auto res =
-        geometry::CheckLineLineIntersection(w.p1, w.p2, ray_start, ray_end);
-    if (!res.first) {
-      continue;
-    }
-    const Eigen::Vector2f& collision_end = res.second;
-    const Eigen::Vector2f& collision_delta = (collision_end - ray.tra);
-    if (delta.squaredNorm() > collision_delta.squaredNorm()) {
-      delta = collision_delta;
-    }
-  }
-  if (delta.squaredNorm() < math_util::Sq(kMinReading)) {
-    return delta.normalized() * kMinReading;
-  }
-  return delta;
-}
-
 sensor_msgs::LaserScan MakeScan(const util::Pose& robot_pose,
                                 const util::Map& map,
                                 const float noise_stddev) {
@@ -71,12 +48,12 @@ sensor_msgs::LaserScan MakeScan(const util::Pose& robot_pose,
   scan.time_increment = 0;
 
   for (int ray_idx = 0; ray_idx < kNumReadings; ++ray_idx) {
-    const float angle =
-        kMinAngle + static_cast<float>(kAngleDelta * ray_idx) + robot_pose.rot;
+    const float angle = math_util::AngleMod(
+        kMinAngle + kAngleDelta * static_cast<float>(ray_idx) + robot_pose.rot);
     const util::Pose ray(robot_pose.tra, angle);
-    const Eigen::Vector2f ray_return = GetRayReturn(ray, map);
-    const float norm = ray_return.norm() + noise_dist(gen);
-    scan.ranges.push_back(norm);
+    const float dist =
+        map.MinDistanceAlongRay(ray, kMinReading, kMaxReading - kEpsilon);
+    scan.ranges.push_back(dist + noise_dist(gen));
   }
 
   return scan;
@@ -217,13 +194,15 @@ int main(int argc, char** argv) {
   ros::Publisher initial_pose_vis_pub =
       n.advertise<visualization_msgs::MarkerArray>("true_pose_vis", 1);
 
-  ros::Rate loop_rate(5);
+  ros::Rate loop_rate(2);
 
   const util::Map map("src/particle_filter/maps/loop.map");
-  const std::vector<util::Pose> waypoints = {{{-3.5, 3.5}, 0},
-                                             {{3.5, 3.5}, -kPi / 2},
-                                             {{3.5, -3.5}, kPi},
-                                             {{-3.5, -3.5}, kPi / 2}};
+  const std::vector<util::Pose> waypoints = {
+      {{3.5, -3.5}, kPi},
+      {{-3.5, -3.5}, kPi / 2},
+      {{-3.5, 3.5}, 0},
+      {{3.5, 3.5}, -kPi / 2},
+  };
 
   util::Pose current_pose = waypoints.front();
 

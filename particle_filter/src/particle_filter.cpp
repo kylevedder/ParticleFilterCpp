@@ -40,19 +40,19 @@ SensorModel::SensorModel(const util::Map& map) : map_(map) {}
 
 float GetDepthProbability(const float& sensor_reading, const float& map_reading,
                           const float& ray_min, const float& ray_max) {
-  const float people_noise =
-      math_util::ProbabilityDensityExp(sensor_reading, 0.01f) * 0.0f;
-  const float sensor_reading_noise =
-      math_util::ProbabilityDensityGuassian(sensor_reading, map_reading,
-                                            pf::kLaserStdDev) *
-      1.0f;
-  const float sensor_random_reading =
-      math_util::ProbabilityDensityUniform(sensor_reading, ray_min, ray_max) *
-      0.0f;
-  const float sensor_random_ray_max =
-      math_util::ProbabilityDensityUniform(sensor_reading, ray_max - 0.01f,
-                                           ray_max) *
-      0.0f;
+  NP_CHECK(ray_min <= ray_max);
+  NP_CHECK(sensor_reading <= ray_max);
+  NP_CHECK(sensor_reading >= ray_min);
+
+  const float people_noise = 0;
+  // math_util::ProbabilityDensityExp(sensor_reading, 0.01f) * 0.0f;
+  const float sensor_reading_noise = math_util::ProbabilityDensityGuassian(
+      sensor_reading, map_reading, pf::kLaserStdDev);
+  const float sensor_random_reading = 0;
+  // math_util::ProbabilityDensityUniform(sensor_reading, ray_min, ray_max)
+  const float sensor_random_ray_max = 0;
+  // math_util::ProbabilityDensityUniform(sensor_reading, ray_max - 0.01f,
+  //                                     ray_max)
   return people_noise + sensor_reading_noise + sensor_random_reading +
          sensor_random_ray_max;
 }
@@ -67,8 +67,12 @@ float SensorModel::GetProbability(const util::Pose& pose_global_frame,
 
   float probability_sum = 0;
 
+  const float& min_angle = laser_scan.ros_laser_scan_.angle_min;
+  const float& angle_delta = laser_scan.ros_laser_scan_.angle_increment;
   const float& range_min = laser_scan.ros_laser_scan_.range_min;
   const float& range_max = laser_scan.ros_laser_scan_.range_max;
+
+  NP_CHECK(range_min <= range_max);
 
   for (size_t i = 0; i < laser_scan.ros_laser_scan_.ranges.size(); ++i) {
     float range = laser_scan.ros_laser_scan_.ranges[i];
@@ -76,16 +80,15 @@ float SensorModel::GetProbability(const util::Pose& pose_global_frame,
       range = range_max;
     }
     range = math_util::Clamp(range, range_min, range_max);
+    NP_CHECK(range >= range_min);
+    NP_CHECK(range <= range_max);
 
-    const Eigen::Vector2f endpoint =
-        laser_scan.GetRayEndpoint(i, pose_global_frame);
-    const Eigen::Vector2f& startpoint = pose_global_frame.tra;
-
-    NP_CHECK((endpoint - startpoint).norm() >= range_min - kEpsilon);
-    NP_CHECK((endpoint - startpoint).norm() <= range_max + kEpsilon);
-
+    const float angle =
+        math_util::AngleMod(min_angle + angle_delta * static_cast<float>(i) +
+                            pose_global_frame.rot);
+    const util::Pose ray(pose_global_frame.tra, angle);
     const float distance_to_map_wall =
-        std::max(map_.MinDistanceAlongRay(startpoint, endpoint), range_min);
+        map_.MinDistanceAlongRay(ray, range_min, range_max);
     NP_FINITE(distance_to_map_wall);
     NP_CHECK(range_min - kEpsilon <= distance_to_map_wall);
     NP_CHECK(distance_to_map_wall <= range_max + kEpsilon);

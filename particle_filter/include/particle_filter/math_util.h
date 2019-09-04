@@ -127,7 +127,7 @@ T ProbabilityDensityGuassian(const T& sample, const T& mean, const T& stddev) {
   if (stddev == 0) {
     return (sample == mean) ? 1 : 0;
   }
-  return 1.0 / sqrt(2 * Sq(stddev) * M_PI) *
+  return 1.0 / sqrt(2 * Sq(stddev) * kPi) *
          exp(-Sq(sample - mean) / (2 * Sq(stddev)));
 }
 

@@ -26,37 +26,39 @@ Map::Map(const std::string& filepath) {
   }
 }
 
-float Map::MinDistanceAlongRay(const Eigen::Vector2f& ray_start,
-                               const Eigen::Vector2f& ray_end) const {
-  NP_FINITE(ray_start.x());
-  NP_FINITE(ray_start.y());
-  NP_FINITE(ray_end.x());
-  NP_FINITE(ray_end.y());
-  NP_CHECK(ray_start != ray_end);
-  float sq_distance = (ray_end - ray_start).squaredNorm();
-  NP_FINITE(sq_distance);
-  for (const Wall& w : walls) {
+float Map::MinDistanceAlongRay(const util::Pose& ray, const float min_depth,
+                               const float max_depth) const {
+  NP_FINITE(ray.tra.x());
+  NP_FINITE(ray.tra.x());
+  NP_FINITE(max_depth);
+
+  Eigen::Vector2f delta =
+      Eigen::Rotation2Df(ray.rot) * Eigen::Vector2f(max_depth, 0);
+  for (const util::Wall& w : this->walls) {
+    const Eigen::Vector2f& ray_start = ray.tra;
+    const Eigen::Vector2f& ray_end = ray.tra + delta;
     const auto res =
         geometry::CheckLineLineIntersection(w.p1, w.p2, ray_start, ray_end);
     if (!res.first) {
       continue;
     }
-    const float candidate_sq_distance = (res.second - ray_start).squaredNorm();
-    if (candidate_sq_distance < sq_distance) {
-      sq_distance = candidate_sq_distance;
+    const Eigen::Vector2f& collision_end = res.second;
+    const Eigen::Vector2f& collision_delta = (collision_end - ray.tra);
+    if (delta.squaredNorm() > collision_delta.squaredNorm()) {
+      delta = collision_delta;
     }
-
-    NP_FINITE(sq_distance);
   }
-
-  return sqrt(sq_distance);
+  if (delta.squaredNorm() < math_util::Sq(kMinReading)) {
+    return min_depth;
+  }
+  return delta.norm();
 }
 
 visualization_msgs::Marker Map::ToMarker() const {
   visualization_msgs::Marker marker;
   marker.header.frame_id = "map";
   marker.header.stamp = ros::Time();
-  marker.ns = "map";
+  marker.ns = "map_ns";
   marker.id = 0;
   marker.type = visualization_msgs::Marker::LINE_LIST;
   marker.action = visualization_msgs::Marker::ADD;

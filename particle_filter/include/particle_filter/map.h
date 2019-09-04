@@ -24,8 +24,8 @@ struct Map {
   Map() = default;
   explicit Map(const std::string& filepath);
 
-  float MinDistanceAlongRay(const Eigen::Vector2f& ray_start,
-                            const Eigen::Vector2f& ray_end) const;
+  float MinDistanceAlongRay(const util::Pose& ray, const float min_depth,
+                            const float max_depth) const;
 
   visualization_msgs::Marker ToMarker() const;
 };

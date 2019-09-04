@@ -21,6 +21,8 @@ struct Pose {
 
   bool operator!=(const Pose& other) const { return !(*this == other); }
 
+  util::Pose operator-() const { return {-tra, -rot}; }
+
   util::Pose operator-(const util::Pose& o) const {
     return {tra - o.tra, math_util::AngleMod(rot - o.rot)};
   }

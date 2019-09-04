@@ -24,23 +24,30 @@ void DrawGroundTruth(const util::Pose& ground_truth,
 }
 
 struct ParticleFilterWrapper {
+  util::Map map;
   localization::ParticleFilter particle_filter;
   util::Pose ground_truth;
   ros::Publisher particle_pub;
   ros::Publisher ground_truth_pub;
   ros::Publisher sampled_laser_pub;
+  ros::Publisher grid_belief_pub;
+  ros::Publisher reference_pub;
 
   static constexpr auto kErrorFile = "error.csv";
 
   ParticleFilterWrapper() = delete;
   ParticleFilterWrapper(const util::Map& map, ros::NodeHandle* n)
-      : particle_filter(map) {
+      : map(map), particle_filter(map) {
     particle_pub =
         n->advertise<visualization_msgs::MarkerArray>("particles", 10);
     ground_truth_pub =
         n->advertise<visualization_msgs::MarkerArray>("ground_truth", 10);
     sampled_laser_pub =
         n->advertise<sensor_msgs::LaserScan>("sampled_laser", 100);
+    grid_belief_pub =
+        n->advertise<visualization_msgs::MarkerArray>("grid_belief", 10);
+    reference_pub =
+        n->advertise<visualization_msgs::MarkerArray>("reference", 10);
     std::ofstream out(kErrorFile, std::fstream::out);
     out << "max_error_x,max_error_y,max_error_norm,max_error_theta,cent_error_"
            "x,cent_error_y,cent_error_norm,cent_error_theta\n";
@@ -70,6 +77,73 @@ struct ParticleFilterWrapper {
     out.close();
   }
 
+  void GridSearchBelief(const util::LaserScan& laser) {
+    visualization_msgs::MarkerArray arr;
+    float max_score = 0;
+    static constexpr float kXMin = -0.75;
+    static constexpr float kXMax = 0.75;
+    static constexpr float kXDel = 0.1;
+    static constexpr float kYMin = -0.75;
+    static constexpr float kYMax = 0.75;
+    static constexpr float kYDel = 0.1;
+    static constexpr float kThetaMin = -kPi / 2;
+    static constexpr float kThetaMax = kPi / 2 + kEpsilon;
+    static constexpr float kThetaDel = kPi / 8;
+
+    auto make_position = [this](const float x, const float y,
+                                const float theta) -> util::Pose {
+      const Eigen::Vector2f offset_vector(x, y);
+      return util::Pose(
+          ground_truth.tra +
+              Eigen::Rotation2Df(ground_truth.rot) * offset_vector,
+          theta + ground_truth.rot);
+    };
+
+    for (float x = kXMin; x <= kXMax; x += kXDel) {
+      for (float y = kYMin; y <= kYMax; y += kYDel) {
+        for (float theta = kThetaMin; theta <= kThetaMax; theta += kThetaDel) {
+          const util::Pose current_pose = make_position(x, y, theta);
+          const float score =
+              particle_filter.ScoreObservation(current_pose, laser);
+          max_score = std::max(max_score, score);
+        }
+      }
+    }
+
+    for (float x = kXMin; x <= kXMax; x += kXDel) {
+      for (float y = kYMin; y <= kYMax; y += kYDel) {
+        for (float theta = kThetaMin; theta <= kThetaMax; theta += kThetaDel) {
+          const Eigen::Vector2f offset_vector(x, y);
+          const util::Pose current_pose = make_position(x, y, theta);
+          const float score =
+              particle_filter.ScoreObservation(current_pose, laser);
+          const float red = score / max_score;
+          visualization::DrawPose(current_pose, "map", "grid_search", red, 0, 0,
+                                  1, &arr, theta);
+        }
+      }
+    }
+
+    ROS_INFO("Published %zu grid elements", arr.markers.size());
+    grid_belief_pub.publish(arr);
+
+    visualization_msgs::MarkerArray ref_arr;
+    const Eigen::Vector2f offset_tra(1, 0.5);
+    const float rotation = 0;
+    const util::Pose base_link_reference(offset_tra, rotation);
+    visualization::DrawPose(base_link_reference, "base_link", "reference", 0, 0,
+                            0, 1, &ref_arr);
+
+    const util::Pose global_reference(
+        ground_truth.tra + Eigen::Rotation2Df(ground_truth.rot) * offset_tra,
+        rotation + ground_truth.rot);
+    visualization::DrawPose(global_reference, "map", "reference", 1, 1, 1, 1,
+                            &ref_arr, 0.1);
+    ref_arr.markers.push_back(visualization::ToLineList(
+        laser, ground_truth, map, "map", "obs", 1, 0, 0, 1));
+    reference_pub.publish(ref_arr);
+  }
+
   void LaserCallback(const sensor_msgs::LaserScan::ConstPtr& msg) {
     util::LaserScan laser(*msg);
     particle_filter.UpdateObservation(laser, &sampled_laser_pub);
@@ -87,9 +161,10 @@ struct ParticleFilterWrapper {
         particle_filter.ScoreObservation(weighted_centroid, laser);
     ROS_INFO("Ground truths score: %f Weighted centroid score: %f",
              ground_truth_score, weighted_centroid_score);
-    if (ground_truth_score < weighted_centroid_score) {
+    if (ground_truth_score + 1 < weighted_centroid_score) {
       ROS_INFO("Weighted centroid too high!");
     }
+    GridSearchBelief(laser);
   }
 
   void OdomCallback(const geometry_msgs::Twist::ConstPtr& msg) {
@@ -122,8 +197,7 @@ int main(int argc, char** argv) {
   ros::NodeHandle n;
 
   ParticleFilterWrapper wrapper(
-      util::Map(
-          "/home/k/code/catkin_ws/src/particle_filter/maps/rectangle.map"),
+      util::Map("/home/k/code/catkin_ws/src/particle_filter/maps/loop.map"),
       &n);
 
   ros::Subscriber initial_pose_sub = n.subscribe(
