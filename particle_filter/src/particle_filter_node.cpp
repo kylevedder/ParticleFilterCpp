@@ -155,15 +155,6 @@ struct ParticleFilterWrapper {
         (weighted_centroid - ground_truth);
     WriteError(max_estimate_error, weighted_centroid_error);
 
-    const float ground_truth_score =
-        particle_filter.ScoreObservation(ground_truth, laser);
-    const float weighted_centroid_score =
-        particle_filter.ScoreObservation(weighted_centroid, laser);
-    ROS_INFO("Ground truths score: %f Weighted centroid score: %f",
-             ground_truth_score, weighted_centroid_score);
-    if (ground_truth_score + 1 < weighted_centroid_score) {
-      ROS_INFO("Weighted centroid too high!");
-    }
     GridSearchBelief(laser);
   }
 

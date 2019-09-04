@@ -10,14 +10,14 @@
 #include "particle_filter/util.h"
 
 struct ParticleFilterWrapper {
+  std::string error_file;
   localization::ParticleFilter particle_filter;
   util::Pose ground_truth;
 
-  static constexpr auto kErrorFile = "error.csv";
-
   ParticleFilterWrapper() = delete;
-  explicit ParticleFilterWrapper(const util::Map& map) : particle_filter(map) {
-    std::ofstream out(kErrorFile, std::fstream::out);
+  ParticleFilterWrapper(const std::string& error_file, const util::Map& map)
+      : error_file(error_file), particle_filter(map) {
+    std::ofstream out(error_file, std::fstream::out);
     out << "max_error_x,max_error_y,max_error_norm,max_error_theta,cent_error_"
            "x,cent_error_y,cent_error_norm,cent_error_theta\n";
     out.close();
@@ -33,7 +33,7 @@ struct ParticleFilterWrapper {
 
   void WriteError(const util::Pose& max_estimate_error,
                   const util::Pose& weighted_centroid_error) const {
-    std::ofstream out(kErrorFile, std::fstream::out | std::fstream::app);
+    std::ofstream out(error_file, std::fstream::out | std::fstream::app);
     out << max_estimate_error.tra.x() << ", ";
     out << max_estimate_error.tra.y() << ", ";
     out << max_estimate_error.tra.norm() << ", ";
@@ -62,16 +62,26 @@ struct ParticleFilterWrapper {
   }
 };
 
+std::pair<std::string, std::vector<std::string>> GetParams(int argc,
+                                                           char** argv) {
+  NP_CHECK(argc > 2);
+  std::vector<std::string> files;
+  for (int i = 2; i < argc; ++i) {
+    files.push_back({argv[i]});
+  }
+  return {argv[1], files};
+}
+
 int main(int argc, char** argv) {
+  const auto config_files = GetParams(argc, argv);
+
   util::PrintCurrentWorkingDirectory();
-  config_reader::ConfigReader reader(
-      {"src/particle_filter/config/pf_config.lua",
-       "src/particle_filter/config/sim_config.lua"});
+  config_reader::ConfigReader reader(config_files.second);
   ParticleFilterWrapper wrapper(
+      config_files.first,
       util::Map("/home/k/code/catkin_ws/src/particle_filter/maps/loop.map"));
 
-  const std::string bag_name =
-      "/home/k/code/catkin_ws/rosbags/down_and_back.bag";
+  const std::string bag_name = "/home/k/code/catkin_ws/rosbags/loop.bag";
   rosbag::Bag bag(bag_name, rosbag::bagmode::Read);
 
   rosbag::View view(bag);

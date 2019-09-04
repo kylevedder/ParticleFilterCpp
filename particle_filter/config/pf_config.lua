@@ -1,6 +1,6 @@
 pf = {
-  kLaserStdDev = 0.01;
-  kArcStdDev = 0.05;
-  kRotateStdDev = 0.02;
-  kTemporalConsistencyWeight = 0.0;
+  kLaserStdDev = 0.051;
+  kArcStdDev = 0.051;
+  kRotateStdDev = 0.021;
+  kTemporalConsistencyWeight = 0.975;
 };

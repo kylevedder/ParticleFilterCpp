@@ -194,7 +194,7 @@ int main(int argc, char** argv) {
   ros::Publisher initial_pose_vis_pub =
       n.advertise<visualization_msgs::MarkerArray>("true_pose_vis", 1);
 
-  ros::Rate loop_rate(2);
+  ros::Rate loop_rate(10);
 
   const util::Map map("src/particle_filter/maps/loop.map");
   const std::vector<util::Pose> waypoints = {
