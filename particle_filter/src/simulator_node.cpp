@@ -196,7 +196,7 @@ int main(int argc, char** argv) {
 
   ros::Rate loop_rate(10);
 
-  const util::Map map("src/particle_filter/maps/loop.map");
+  const util::Map map("src/particle_filter/maps/loop_small_bumps.map");
   const std::vector<util::Pose> waypoints = {
       {{3.5, -3.5}, kPi},
       {{-3.5, -3.5}, kPi / 2},

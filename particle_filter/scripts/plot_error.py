@@ -17,6 +17,7 @@ standard_df = pandas.read_csv(standard_csv_file)
 plt.subplot(211)
 plt.title("Weighted Average Particle Estimate")
 row_name = "cent_error_norm"
+print("{}% error of standard".format(mything_df[row_name].mean() / standard_df[row_name].mean() * 100))
 plt.plot(range(len(mything_df[row_name])), mything_df[row_name], 'g', label="PF + Short-term features")
 plt.plot(range(len(mything_df[row_name])), [mything_df[row_name].mean()] * len(mything_df[row_name]), 'g')
 plt.plot(range(len(standard_df[row_name])), standard_df[row_name], 'r', label="Standard PF")
@@ -28,6 +29,7 @@ plt.grid()
 plt.subplot(212)
 plt.title("Max Weighted Particle Estimate")
 row_name = "max_error_norm"
+print("{}% error of standard".format(mything_df[row_name].mean() / standard_df[row_name].mean() * 100))
 plt.plot(range(len(mything_df[row_name])), mything_df[row_name], 'g', label="PF + Short-term features")
 plt.plot(range(len(mything_df[row_name])), [mything_df[row_name].mean()] * len(mything_df[row_name]), 'g')
 plt.plot(range(len(standard_df[row_name])), standard_df[row_name], 'r', label="Standard PF")
@@ -37,5 +39,3 @@ plt.ylabel("Translational error (meters)")
 plt.legend()
 plt.grid()
 plt.show()
-    
-    
