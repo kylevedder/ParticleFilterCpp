@@ -79,7 +79,8 @@ int main(int argc, char** argv) {
   config_reader::ConfigReader reader(config_files.second);
   ParticleFilterWrapper wrapper(
       config_files.first,
-      util::Map("/home/k/code/catkin_ws/src/particle_filter/maps/loop.map"));
+      util::Map("/home/k/code/catkin_ws/src/particle_filter/maps/"
+                "loop_small_bumps.map"));
 
   const std::string bag_name = "/home/k/code/catkin_ws/rosbags/loop.bag";
   rosbag::Bag bag(bag_name, rosbag::bagmode::Read);

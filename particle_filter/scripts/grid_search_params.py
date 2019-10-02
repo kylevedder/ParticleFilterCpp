@@ -17,7 +17,7 @@ def result_append(laser, arc, rot, consist, centroid_5th, centroid_50th, centroi
 laser_vals = np.arange(0.001, 0.5, 0.05)
 arc_vals = np.arange(0.001, 0.5, 0.05)
 rot_vals = np.arange(0.001, 0.2, 0.02)
-consist_vals = np.arange(0.0, 1, 0.075)
+consist_vals = np.arange(0.0, 1.2, 0.075)
 
 
 tasks = list(itertools.product(*[laser_vals, arc_vals, rot_vals, consist_vals]))

@@ -156,11 +156,11 @@ struct ParticleFilterWrapper {
     WriteError(max_estimate_error, weighted_centroid_error);
 
     GridSearchBelief(laser);
-    static int iteration = 0;
-    if (iteration > 1000) {
-      exit(0);
-    }
-    ++iteration;
+    // static int iteration = 0;
+    // if (iteration > 1000) {
+    //   exit(0);
+    // }
+    // ++iteration;
   }
 
   void OdomCallback(const geometry_msgs::Twist::ConstPtr& msg) {

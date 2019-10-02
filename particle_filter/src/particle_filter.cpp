@@ -219,18 +219,24 @@ void ParticleFilter::ResampleParticles() {
     return sum;
   }();
 
-  std::uniform_real_distribution<> distribution(0.0f, total_weights);
+  const float low_variance_step_size = total_weights / kNumParticles;
+  std::uniform_real_distribution<> distribution(0.0f, low_variance_step_size);
+  const float low_variance_start = distribution(gen_);
 
   auto resampled_particles = particles_;
+  float current_weight = low_variance_start;
+  size_t old_particle_index = 0;
   for (Particle& new_p : resampled_particles) {
-    float weight_sample = distribution(gen_);
-    NP_CHECK(weight_sample <= total_weights);
-    for (const Particle& old_p : particles_) {
-      if (weight_sample <= old_p.weight) {
+    for (size_t i = old_particle_index; i < particles_.size(); ++i) {
+      NP_CHECK(i < particles_.size());
+      const Particle& old_p = particles_[i];
+      if (current_weight <= old_p.weight) {
         new_p = old_p;
+        old_particle_index = i;
+        current_weight += low_variance_step_size;
         break;
       }
-      weight_sample -= old_p.weight;
+      current_weight -= old_p.weight;
     }
   }
 
