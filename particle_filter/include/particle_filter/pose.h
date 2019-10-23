@@ -3,6 +3,8 @@
 #include "eigen3/Eigen/Core"
 #include "eigen3/Eigen/Geometry"
 
+#include "geometry_msgs/Point.h"
+#include "geometry_msgs/Pose.h"
 #include "geometry_msgs/Twist.h"
 #include "particle_filter/math_util.h"
 
@@ -13,6 +15,13 @@ struct Pose {
   Pose() : tra(), rot(){};
   explicit Pose(const geometry_msgs::Twist& twist)
       : tra(twist.linear.x, twist.linear.y), rot(twist.angular.z) {}
+  explicit Pose(const geometry_msgs::Pose& pose)
+      : tra(pose.position.x, pose.position.y), rot(0) {
+    const auto& q = pose.orientation;
+    const float siny_cosp = 2.0 * (q.w * q.z + q.x * q.y);
+    const float cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z);
+    rot = atan2(siny_cosp, cosy_cosp);
+  }
   Pose(const Eigen::Vector2f& tra, const float& rot) : tra(tra), rot(rot){};
 
   bool operator==(const Pose& other) const {

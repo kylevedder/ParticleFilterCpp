@@ -168,13 +168,17 @@ target_link_libraries(particle_filter_lib
    ${catkin_LIBRARIES}
 )
 
-add_executable(particle_filter_node src/particle_filter_node.cpp)
-target_link_libraries(particle_filter_node particle_filter_lib lua5.1 ${catkin_LIBRARIES})
-add_dependencies(particle_filter_node particle_filter_lib)
+add_executable(particle_filter_sim_node src/particle_filter_sim_node.cpp)
+target_link_libraries(particle_filter_sim_node particle_filter_lib lua5.1 ${catkin_LIBRARIES})
+add_dependencies(particle_filter_sim_node particle_filter_lib)
+
+add_executable(particle_filter_production_node src/particle_filter_production_node.cpp)
+target_link_libraries(particle_filter_production_node particle_filter_lib lua5.1 ${catkin_LIBRARIES})
+add_dependencies(particle_filter_production_node particle_filter_lib)
 
 add_executable(particle_filter_bag_reader src/particle_filter_bag_reader.cpp)
 target_link_libraries(particle_filter_bag_reader particle_filter_lib lua5.1 ${catkin_LIBRARIES})
-add_dependencies(particle_filter_node particle_filter_lib)
+add_dependencies(particle_filter_bag_reader particle_filter_lib)
 
 add_executable(simulator_node src/simulator_node.cpp)
 target_link_libraries(simulator_node util_lib lua5.1 ${catkin_LIBRARIES})
