@@ -16,14 +16,6 @@
 #include <eigen3/Eigen/Geometry>
 #include <fstream>
 
-void DrawGroundTruth(const util::Pose& ground_truth,
-                     ros::Publisher* ground_truth_pub) {
-  visualization_msgs::MarkerArray arr;
-  visualization::DrawPose(ground_truth, "map", "ground_truth", 0, 1, 0, 1,
-                          &arr);
-  ground_truth_pub->publish(arr);
-}
-
 struct ParticleFilterWrapper {
   util::Map map;
   localization::ParticleFilter particle_filter;
@@ -121,7 +113,7 @@ struct ParticleFilterWrapper {
   }
 
   void OdomCallback(const nav_msgs::Odometry::ConstPtr& msg) {
-    util::Pose odom(msg->pose.pose);
+    util::Pose odom(msg->twist.twist);
     particle_filter.UpdateOdom(odom.tra.x(), odom.rot);
     particle_filter.DrawParticles(&particle_pub);
   }
@@ -132,7 +124,7 @@ int main(int argc, char** argv) {
   CONFIG_FLOAT(kInitX, "pf.kInitX");
   CONFIG_FLOAT(kInitY, "pf.kInitY");
   CONFIG_FLOAT(kInitTheta, "pf.kInitTheta");
-  
+
   util::PrintCurrentWorkingDirectory();
   config_reader::ConfigReader reader(
       {"src/particle_filter/config/pf_production_config.lua"});
