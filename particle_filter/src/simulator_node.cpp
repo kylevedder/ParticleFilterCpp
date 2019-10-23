@@ -20,6 +20,15 @@
 #include <random>
 #include <string>
 
+namespace sim {
+CONFIG_FLOAT(kLaserStdDev, "sim.kLaserStdDev");
+CONFIG_FLOAT(kArcExecStdDev, "sim.kArcExecStdDev");
+CONFIG_FLOAT(kArcReadStdDev, "sim.kArcReadStdDev");
+CONFIG_FLOAT(kRotateExecStdDev, "sim.kRotateExecStdDev");
+CONFIG_FLOAT(kRotateReadStdDev, "sim.kRotateReadStdDev");
+
+}  // namespace sim
+
 // std::random_device rd;
 std::mt19937 gen(0);
 

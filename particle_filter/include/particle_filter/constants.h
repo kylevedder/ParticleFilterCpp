@@ -8,15 +8,6 @@ static constexpr bool kProduction = false;
 static constexpr float kPi = M_PI;
 static constexpr float kEpsilon = 0.001f;
 
-namespace sim {
-CONFIG_FLOAT(kLaserStdDev, "sim.kLaserStdDev");
-CONFIG_FLOAT(kArcExecStdDev, "sim.kArcExecStdDev");
-CONFIG_FLOAT(kArcReadStdDev, "sim.kArcReadStdDev");
-CONFIG_FLOAT(kRotateExecStdDev, "sim.kRotateExecStdDev");
-CONFIG_FLOAT(kRotateReadStdDev, "sim.kRotateReadStdDev");
-
-}  // namespace sim
-
 namespace pf {
 CONFIG_FLOAT(kLaserStdDev, "pf.kLaserStdDev");
 CONFIG_FLOAT(kArcStdDev, "pf.kArcStdDev");
