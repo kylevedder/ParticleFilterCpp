@@ -192,9 +192,9 @@ int main(int argc, char** argv) {
 
   ros::NodeHandle n;
 
-  ParticleFilterWrapper wrapper(
-      util::Map("/home/k/code/catkin_ws/src/particle_filter/maps/loop.map"),
-      &n);
+  CONFIG_STRING(kMap, "pf.kMap");
+
+  ParticleFilterWrapper wrapper(util::Map(kMap), &n);
 
   ros::Subscriber initial_pose_sub = n.subscribe(
       "true_pose", 1000, &ParticleFilterWrapper::StartCallback, &wrapper);

@@ -148,9 +148,14 @@ int main(int argc, char** argv) {
 
   ros::NodeHandle n;
 
-  ParticleFilterWrapper wrapper(
-      util::Map("/home/k/code/catkin_ws/src/particle_filter/maps/loop.map"),
-      &n);
+  CONFIG_STRING(kMap, "pf.kMap");
+
+  CONFIG_FLOAT(kInitX, "pf.kInitX");
+  CONFIG_FLOAT(kInitY, "pf.kInitY");
+  CONFIG_FLOAT(kInitTheta, "pf.kInitTheta");
+
+  ParticleFilterWrapper wrapper(util::Map(kMap), &n);
+  wrapper.particle_filter.InitalizePose({{kInitX, kInitY}, kInitTheta});
 
   ros::Subscriber laser_sub = n.subscribe(
       "/scan", 1000, &ParticleFilterWrapper::LaserCallback, &wrapper);
