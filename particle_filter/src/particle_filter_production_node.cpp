@@ -128,9 +128,14 @@ struct ParticleFilterWrapper {
 };
 
 int main(int argc, char** argv) {
+  CONFIG_STRING(kMap, "pf.kMap");
+  CONFIG_FLOAT(kInitX, "pf.kInitX");
+  CONFIG_FLOAT(kInitY, "pf.kInitY");
+  CONFIG_FLOAT(kInitTheta, "pf.kInitTheta");
+  
   util::PrintCurrentWorkingDirectory();
   config_reader::ConfigReader reader(
-      {"src/ParticleFilterCpp/particle_filter/config/pf_config.lua"});
+      {"src/particle_filter/config/pf_production_config.lua"});
   ros::init(argc, argv, "particle_filter", ros::init_options::NoSigintHandler);
 
   if (signal(SIGINT, util::crash::FatalSignalHandler) == SIG_ERR) {
@@ -147,12 +152,6 @@ int main(int argc, char** argv) {
   }
 
   ros::NodeHandle n;
-
-  CONFIG_STRING(kMap, "pf.kMap");
-
-  CONFIG_FLOAT(kInitX, "pf.kInitX");
-  CONFIG_FLOAT(kInitY, "pf.kInitY");
-  CONFIG_FLOAT(kInitTheta, "pf.kInitTheta");
 
   ParticleFilterWrapper wrapper(util::Map(kMap), &n);
   wrapper.particle_filter.InitalizePose({{kInitX, kInitY}, kInitTheta});
