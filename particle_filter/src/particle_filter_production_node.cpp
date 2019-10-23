@@ -109,7 +109,7 @@ struct ParticleFilterWrapper {
     particle_filter.UpdateObservation(laser, &sampled_laser_pub);
     particle_filter.DrawParticles(&particle_pub);
 
-    GridSearchBelief(laser);
+    // GridSearchBelief(laser);
   }
 
   void OdomCallback(const nav_msgs::Odometry::ConstPtr& msg) {
