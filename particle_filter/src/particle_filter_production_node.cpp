@@ -20,7 +20,7 @@ struct ParticleFilterWrapper {
   util::Map map;
   localization::ParticleFilter particle_filter;
 
-  float last_odom_update_;
+  double last_odom_update_;
 
   ros::Publisher particle_pub;
   ros::Publisher sampled_laser_pub;
@@ -106,22 +106,22 @@ struct ParticleFilterWrapper {
     reference_pub.publish(ref_arr);
   }
 
-  void LaserCallback(const sensor_msgs::LaserScan::ConstPtr& msg) {
-    util::LaserScan laser(*msg);
+  void LaserCallback(const sensor_msgs::LaserScan& msg) {
+    util::LaserScan laser(msg);
     particle_filter.UpdateObservation(laser, &sampled_laser_pub);
     particle_filter.DrawParticles(&particle_pub);
 
     // GridSearchBelief(laser);
   }
 
-  void OdomCallback(const nav_msgs::Odometry::ConstPtr& msg) {
-    const float current_time = msg->header.stamp.toSec();
+  void OdomCallback(const nav_msgs::Odometry& msg) {
+    const double current_time = msg.header.stamp.toSec();
     if (last_odom_update_ == 0 || last_odom_update_ >= current_time) {
       last_odom_update_ = current_time;
       return;
     }
-    util::Pose odom(msg->twist.twist);
-    odom /= (current_time - last_odom_update_);
+    util::Pose odom(msg.twist.twist);
+    odom *= (current_time - last_odom_update_);
     particle_filter.UpdateOdom(odom.tra.x(), odom.rot);
     particle_filter.DrawParticles(&particle_pub);
     last_odom_update_ = current_time;
@@ -136,7 +136,7 @@ int main(int argc, char** argv) {
 
   util::PrintCurrentWorkingDirectory();
   config_reader::ConfigReader reader(
-      {"src/particle_filter/config/pf_production_config.lua"});
+      {"src/ParticleFilterCpp/particle_filter/config/pf_production_config.lua"});
   ros::init(argc, argv, "particle_filter", ros::init_options::NoSigintHandler);
 
   if (signal(SIGINT, util::crash::FatalSignalHandler) == SIG_ERR) {
@@ -158,9 +158,9 @@ int main(int argc, char** argv) {
   wrapper.particle_filter.InitalizePose({{kInitX, kInitY}, kInitTheta});
 
   ros::Subscriber laser_sub = n.subscribe(
-      "/scan", 1000, &ParticleFilterWrapper::LaserCallback, &wrapper);
+      "/scan", 10, &ParticleFilterWrapper::LaserCallback, &wrapper);
   ros::Subscriber odom_sub = n.subscribe(
-      "/odom", 1000, &ParticleFilterWrapper::OdomCallback, &wrapper);
+      "/odom", 10, &ParticleFilterWrapper::OdomCallback, &wrapper);
 
   ros::spin();
 
