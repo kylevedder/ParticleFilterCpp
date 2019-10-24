@@ -11,6 +11,7 @@
 #include <nav_msgs/Odometry.h>
 #include <ros/ros.h>
 #include <sensor_msgs/LaserScan.h>
+#include <tf/transform_broadcaster.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <eigen3/Eigen/Core>
 #include <eigen3/Eigen/Geometry>
@@ -26,6 +27,9 @@ struct ParticleFilterWrapper {
   ros::Publisher sampled_laser_pub;
   ros::Publisher grid_belief_pub;
   ros::Publisher reference_pub;
+  ros::Publisher map_pub;
+
+  tf::TransformBroadcaster br;
 
   ParticleFilterWrapper() = delete;
   ParticleFilterWrapper(const util::Map& map, ros::NodeHandle* n)
@@ -38,6 +42,7 @@ struct ParticleFilterWrapper {
         n->advertise<visualization_msgs::MarkerArray>("grid_belief", 10);
     reference_pub =
         n->advertise<visualization_msgs::MarkerArray>("reference", 10);
+    map_pub = n->advertise<visualization_msgs::Marker>("map", 10);
   }
 
   void GridSearchBelief(const util::LaserScan& laser) {
@@ -106,10 +111,24 @@ struct ParticleFilterWrapper {
     reference_pub.publish(ref_arr);
   }
 
+  void DrawMap() {
+    map_pub.publish(map.ToMarker());
+    // tf::Transform transform;
+    // transform.setOrigin(
+    //     tf::Vector3(current_pose.tra.x(), current_pose.tra.y(), 0.0));
+    // tf::Quaternion q;
+    // q.setRPY(0, 0, current_pose.rot);
+    // transform.setRotation(q);
+    // br.sendTransform(
+    //     tf::StampedTransform(transform, ros::Time::now(), "map",
+    //     "base_link"));
+  }
+
   void LaserCallback(const sensor_msgs::LaserScan& msg) {
     util::LaserScan laser(msg);
     particle_filter.UpdateObservation(laser, &sampled_laser_pub);
     particle_filter.DrawParticles(&particle_pub);
+    DrawMap();
 
     // GridSearchBelief(laser);
   }
@@ -136,7 +155,8 @@ int main(int argc, char** argv) {
 
   util::PrintCurrentWorkingDirectory();
   config_reader::ConfigReader reader(
-      {"src/ParticleFilterCpp/particle_filter/config/pf_production_config.lua"});
+      {"src/ParticleFilterCpp/particle_filter/config/"
+       "pf_production_config.lua"});
   ros::init(argc, argv, "particle_filter", ros::init_options::NoSigintHandler);
 
   if (signal(SIGINT, util::crash::FatalSignalHandler) == SIG_ERR) {
@@ -157,10 +177,10 @@ int main(int argc, char** argv) {
   ParticleFilterWrapper wrapper(util::Map(kMap), &n);
   wrapper.particle_filter.InitalizePose({{kInitX, kInitY}, kInitTheta});
 
-  ros::Subscriber laser_sub = n.subscribe(
-      "/scan", 10, &ParticleFilterWrapper::LaserCallback, &wrapper);
-  ros::Subscriber odom_sub = n.subscribe(
-      "/odom", 10, &ParticleFilterWrapper::OdomCallback, &wrapper);
+  ros::Subscriber laser_sub =
+      n.subscribe("/scan", 10, &ParticleFilterWrapper::LaserCallback, &wrapper);
+  ros::Subscriber odom_sub =
+      n.subscribe("/odom", 10, &ParticleFilterWrapper::OdomCallback, &wrapper);
 
   ros::spin();
 
