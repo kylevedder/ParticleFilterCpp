@@ -20,6 +20,8 @@ struct ParticleFilterWrapper {
   util::Map map;
   localization::ParticleFilter particle_filter;
 
+  float last_odom_update_;
+
   ros::Publisher particle_pub;
   ros::Publisher sampled_laser_pub;
   ros::Publisher grid_belief_pub;
@@ -27,7 +29,7 @@ struct ParticleFilterWrapper {
 
   ParticleFilterWrapper() = delete;
   ParticleFilterWrapper(const util::Map& map, ros::NodeHandle* n)
-      : map(map), particle_filter(map) {
+      : map(map), particle_filter(map), last_odom_update_(0) {
     particle_pub =
         n->advertise<visualization_msgs::MarkerArray>("particles", 10);
     sampled_laser_pub =
@@ -113,9 +115,16 @@ struct ParticleFilterWrapper {
   }
 
   void OdomCallback(const nav_msgs::Odometry::ConstPtr& msg) {
+    const float current_time = msg->header.stamp.toSec();
+    if (last_odom_update_ == 0 || last_odom_update_ >= current_time) {
+      last_odom_update_ = current_time;
+      return;
+    }
     util::Pose odom(msg->twist.twist);
+    odom /= (current_time - last_odom_update_);
     particle_filter.UpdateOdom(odom.tra.x(), odom.rot);
     particle_filter.DrawParticles(&particle_pub);
+    last_odom_update_ = current_time;
   }
 };
 

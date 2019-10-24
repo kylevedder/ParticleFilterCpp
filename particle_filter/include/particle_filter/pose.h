@@ -30,6 +30,24 @@ struct Pose {
 
   bool operator!=(const Pose& other) const { return !(*this == other); }
 
+  Pose operator/(const float& other) const {
+    return {tra / other, rot / other};
+  }
+
+  void operator/=(const float& other) {
+    tra /= other;
+    rot /= other;
+  }
+
+  Pose operator*(const float& other) const {
+    return {tra * other, rot * other};
+  }
+
+  void operator*=(const float& other) {
+    tra *= other;
+    rot *= other;
+  }
+
   util::Pose operator-() const { return {-tra, -rot}; }
 
   util::Pose operator-(const util::Pose& o) const {
