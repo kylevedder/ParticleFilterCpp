@@ -113,15 +113,19 @@ struct ParticleFilterWrapper {
 
   void DrawMap() {
     map_pub.publish(map.ToMarker());
-    // tf::Transform transform;
-    // transform.setOrigin(
-    //     tf::Vector3(current_pose.tra.x(), current_pose.tra.y(), 0.0));
-    // tf::Quaternion q;
-    // q.setRPY(0, 0, current_pose.rot);
-    // transform.setRotation(q);
-    // br.sendTransform(
-    //     tf::StampedTransform(transform, ros::Time::now(), "map",
-    //     "base_link"));
+    tf::Transform transform;
+    const util::Pose current_pose = particle_filter.WeightedCentroid();
+    transform.setOrigin(
+        tf::Vector3(current_pose.tra.x(), current_pose.tra.y(), 0.0));
+    tf::Quaternion q;
+    q.setRPY(0, 0, current_pose.rot);
+    transform.setRotation(q);
+    br.sendTransform(
+        tf::StampedTransform(transform, ros::Time::now(), "map",
+        "base_link"));
+    br.sendTransform(
+        tf::StampedTransform(transform, ros::Time::now(), "map",
+        "laser"));
   }
 
   void LaserCallback(const sensor_msgs::LaserScan& msg) {
